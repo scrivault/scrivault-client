@@ -161,6 +161,23 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 	return body as T;
 }
 
+// ── Authenticated fetch wrapper ─────────────────────────────────
+
+/** Injects Authorization: Bearer header. Used by newsroom endpoints. */
+export async function authRequest<T>(
+	path: string,
+	token: string,
+	options?: RequestInit
+): Promise<T> {
+	return request<T>(path, {
+		...options,
+		headers: {
+			...options?.headers,
+			Authorization: `Bearer ${token}`
+		}
+	});
+}
+
 // ── Endpoints ──────────────────────────────────────────────────
 
 export const api = {

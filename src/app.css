@@ -24,6 +24,8 @@
 	--color-vault-amber-muted: rgba(245, 158, 11, 0.1);
 	--color-vault-red: #ef4444;
 	--color-vault-red-muted: rgba(239, 68, 68, 0.1);
+	--color-vault-blue: #3b82f6;
+	--color-vault-blue-muted: rgba(59, 130, 246, 0.1);
 
 	/* Typography */
 	--font-sans: "IBM Plex Sans", system-ui, sans-serif;

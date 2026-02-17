@@ -36,8 +36,13 @@
 		error: string;
 	}
 
+	type TimelineItem =
+		| { kind: 'message'; data: DecryptedMessage }
+		| { kind: 'document'; data: DecryptedDocument };
+
 	let messages: DecryptedMessage[] = $state([]);
 	let documents: DecryptedDocument[] = $state([]);
+	let timeline: TimelineItem[] = $state([]);
 	let replyText = $state('');
 	let files: FileList | null = $state(null);
 	let sending = $state(false);
@@ -125,16 +130,20 @@
 			}
 			messages = decrypted;
 
-			// Discover documents from provenance chain
+			// Fetch provenance chain for chronological ordering + document discovery
+			let provenanceEntries: import('$lib/api').ProvenanceEntry[] = [];
+			const docs: DecryptedDocument[] = [];
+
 			try {
 				const provenance = await api.getProvenance(currentThreadId);
-				const docIds = provenance.entries
+				provenanceEntries = provenance.entries;
+
+				const docIds = provenanceEntries
 					.filter((e) => e.event_type === 'document_uploaded')
 					.map((e) => (e.event_data as Record<string, string>).document_id)
 					.filter((id): id is string => !!id);
 
 				// Fetch and decrypt each document's metadata
-				const docs: DecryptedDocument[] = [];
 				for (const docId of docIds) {
 					try {
 						const docData = await api.getDocument(docId);
@@ -179,8 +188,42 @@
 				}
 				documents = docs;
 			} catch {
-				// Provenance fetch failed — not critical, just no documents shown
+				// Provenance fetch failed — documents won't show, but messages still work
+				documents = [];
 			}
+
+			// Build unified timeline from provenance ordering
+			const msgMap = new Map(decrypted.map((m) => [m.id, m]));
+			const docMap = new Map(docs.map((d) => [d.id, d]));
+			const items: TimelineItem[] = [];
+			const seen = new Set<string>();
+
+			for (const entry of provenanceEntries) {
+				const edata = entry.event_data as Record<string, string>;
+				if (entry.event_type === 'message_added' && edata.message_id) {
+					const msg = msgMap.get(edata.message_id);
+					if (msg) {
+						items.push({ kind: 'message', data: msg });
+						seen.add(msg.id);
+					}
+				} else if (entry.event_type === 'document_uploaded' && edata.document_id) {
+					const doc = docMap.get(edata.document_id);
+					if (doc) {
+						items.push({ kind: 'document', data: doc });
+						seen.add(doc.id);
+					}
+				}
+			}
+
+			// Fallback: append anything not found in provenance
+			for (const msg of decrypted) {
+				if (!seen.has(msg.id)) items.push({ kind: 'message', data: msg });
+			}
+			for (const doc of docs) {
+				if (!seen.has(doc.id)) items.push({ kind: 'document', data: doc });
+			}
+
+			timeline = items;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load messages.';
 		} finally {
@@ -203,12 +246,14 @@
 			const blob = new Blob([plainBytes], { type: doc.mimeType });
 			doc.blobUrl = URL.createObjectURL(blob);
 			doc.loading = false;
-			// Trigger reactivity
+			// Trigger reactivity on both arrays
 			documents = [...documents];
+			timeline = [...timeline];
 		} catch {
 			doc.error = 'Failed to decrypt';
 			doc.loading = false;
 			documents = [...documents];
+			timeline = [...timeline];
 		}
 	}
 
@@ -225,6 +270,7 @@
 		// Otherwise fetch, decrypt, and download
 		doc.loading = true;
 		documents = [...documents];
+		timeline = [...timeline];
 
 		try {
 			await ensureReady();
@@ -239,11 +285,13 @@
 			doc.blobUrl = url;
 			doc.loading = false;
 			documents = [...documents];
+			timeline = [...timeline];
 			triggerDownload(url, doc.fileName);
 		} catch {
 			doc.error = 'Failed to decrypt';
 			doc.loading = false;
 			documents = [...documents];
+			timeline = [...timeline];
 		}
 	}
 
@@ -392,111 +440,100 @@
 					</button>
 				</div>
 			</div>
-		{:else if messages.length === 0 && documents.length === 0}
+		{:else if timeline.length === 0}
 			<div class="flex items-center justify-center py-20 text-sm text-vault-text-dim">
 				No messages yet.
 			</div>
 		{:else}
-			<!-- Messages -->
-			{#each messages as msg (msg.id)}
-				{@const isSource = msg.senderRole === 'source'}
-				<div class="flex {isSource ? 'justify-start' : 'justify-end'}">
-					<div class="max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-4 py-3">
-						<!-- Sender label -->
-						<div class="flex items-center gap-2 mb-1.5">
-							<span class="font-mono text-[10px] uppercase tracking-wider {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
-								{isSource ? 'You' : 'Journalist'}
-							</span>
-							<span class="text-[10px] text-vault-text-dim">
-								{formatTime(msg.createdAt)}
-							</span>
+			<!-- Unified timeline: messages and documents in chronological order -->
+			{#each timeline as item (item.data.id)}
+				{#if item.kind === 'message'}
+					{@const msg = item.data}
+					{@const isSource = msg.senderRole === 'source'}
+					<div class="flex {isSource ? 'justify-start' : 'justify-end'}">
+						<div class="max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-4 py-3">
+							<!-- Sender label -->
+							<div class="flex items-center gap-2 mb-1.5">
+								<span class="font-mono text-[10px] uppercase tracking-wider {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
+									{isSource ? 'You' : 'Journalist'}
+								</span>
+								<span class="text-[10px] text-vault-text-dim">
+									{formatTime(msg.createdAt)}
+								</span>
+							</div>
+							<!-- Message body -->
+							<p class="text-sm text-vault-text whitespace-pre-wrap break-words">{msg.text}</p>
 						</div>
-						<!-- Message body -->
-						<p class="text-sm text-vault-text whitespace-pre-wrap break-words">{msg.text}</p>
 					</div>
-				</div>
-			{/each}
-
-			<!-- Documents -->
-			{#if documents.length > 0}
-				<div class="pt-2">
-					<div class="font-mono text-[10px] text-vault-text-dim uppercase tracking-wider mb-3 flex items-center gap-2">
-						<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-						</svg>
-						Attachments ({documents.length})
-					</div>
-					<div class="space-y-3">
-						{#each documents as doc (doc.id)}
-							<div class="rounded-lg bg-vault-surface border border-vault-border overflow-hidden">
-								<!-- Image preview -->
-								{#if doc.isImage && doc.blobUrl}
-									<div class="p-2 bg-vault-bg">
-										<img
-											src={doc.blobUrl}
-											alt={doc.fileName}
-											class="max-w-full max-h-80 rounded object-contain mx-auto"
-										/>
-									</div>
-								{:else if doc.isImage && doc.loading}
-									<div class="p-8 bg-vault-bg flex items-center justify-center">
-										<div class="flex items-center gap-2 text-vault-text-muted">
-											<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-												<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-												<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-											</svg>
-											<span class="text-xs">Decrypting image…</span>
-										</div>
-									</div>
-								{:else if doc.isImage && doc.error}
-									<div class="p-8 bg-vault-bg flex items-center justify-center">
-										<span class="text-xs text-vault-red">{doc.error}</span>
-									</div>
-								{/if}
-
-								<!-- File info bar -->
-								<div class="flex items-center justify-between px-3 py-2.5">
-									<div class="flex items-center gap-2 min-w-0">
-										<!-- File icon -->
-										{#if doc.isImage}
-											<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-											</svg>
-										{:else}
-											<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-											</svg>
-										{/if}
-										<div class="min-w-0">
-											<p class="text-sm text-vault-text font-mono truncate">{doc.fileName}</p>
-											<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
-										</div>
-									</div>
-
-									<!-- Download button -->
-									<button
-										onclick={() => handleDownload(doc)}
-										disabled={doc.loading}
-										class="shrink-0 ml-3 p-1.5 rounded text-vault-text-muted hover:text-vault-text hover:bg-vault-bg transition-colors disabled:opacity-30"
-										title="Download file"
-									>
-										{#if doc.loading}
-											<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-												<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-												<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-											</svg>
-										{:else}
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-											</svg>
-										{/if}
-									</button>
+				{:else}
+					{@const doc = item.data}
+					<div class="rounded-lg bg-vault-surface border border-vault-border overflow-hidden">
+						<!-- Image preview -->
+						{#if doc.isImage && doc.blobUrl}
+							<div class="p-2 bg-vault-bg">
+								<img
+									src={doc.blobUrl}
+									alt={doc.fileName}
+									class="max-w-full max-h-80 rounded object-contain mx-auto"
+								/>
+							</div>
+						{:else if doc.isImage && doc.loading}
+							<div class="p-8 bg-vault-bg flex items-center justify-center">
+								<div class="flex items-center gap-2 text-vault-text-muted">
+									<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+									<span class="text-xs">Decrypting image…</span>
 								</div>
 							</div>
-						{/each}
+						{:else if doc.isImage && doc.error}
+							<div class="p-8 bg-vault-bg flex items-center justify-center">
+								<span class="text-xs text-vault-red">{doc.error}</span>
+							</div>
+						{/if}
+
+						<!-- File info bar -->
+						<div class="flex items-center justify-between px-3 py-2.5">
+							<div class="flex items-center gap-2 min-w-0">
+								<!-- File icon -->
+								{#if doc.isImage}
+									<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+									</svg>
+								{:else}
+									<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+									</svg>
+								{/if}
+								<div class="min-w-0">
+									<p class="text-sm text-vault-text font-mono truncate">{doc.fileName}</p>
+									<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
+								</div>
+							</div>
+
+							<!-- Download button -->
+							<button
+								onclick={() => handleDownload(doc)}
+								disabled={doc.loading}
+								class="shrink-0 ml-3 p-1.5 rounded text-vault-text-muted hover:text-vault-text hover:bg-vault-bg transition-colors disabled:opacity-30"
+								title="Download file"
+							>
+								{#if doc.loading}
+									<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+								{:else}
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+									</svg>
+								{/if}
+							</button>
+						</div>
 					</div>
-				</div>
-			{/if}
+				{/if}
+			{/each}
 		{/if}
 	</div>
 
