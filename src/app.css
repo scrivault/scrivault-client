@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/*
+ * Scrivault Design Tokens
+ * IBM Plex Mono + Sans, dark theme, minimal color
+ */
+
+@theme {
+	/* Colors */
+	--color-vault-bg: #0a0a0a;
+	--color-vault-surface: #111111;
+	--color-vault-surface-raised: #1a1a1a;
+	--color-vault-border: #262626;
+	--color-vault-border-subtle: #1c1c1c;
+	--color-vault-text: #e5e5e5;
+	--color-vault-text-muted: #737373;
+	--color-vault-text-dim: #525252;
+
+	/* Accent colors */
+	--color-vault-green: #22c55e;
+	--color-vault-green-dim: #16a34a;
+	--color-vault-green-muted: rgba(34, 197, 94, 0.1);
+	--color-vault-amber: #f59e0b;
+	--color-vault-amber-muted: rgba(245, 158, 11, 0.1);
+	--color-vault-red: #ef4444;
+	--color-vault-red-muted: rgba(239, 68, 68, 0.1);
+
+	/* Typography */
+	--font-sans: "IBM Plex Sans", system-ui, sans-serif;
+	--font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+	/* Spacing */
+	--spacing-page: 1.5rem;
+}
+
+/* Base styles */
+html {
+	background-color: var(--color-vault-bg);
+	color: var(--color-vault-text);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	min-height: 100vh;
+}
+
+/* Selection */
+::selection {
+	background-color: rgba(34, 197, 94, 0.3);
+	color: #fff;
+}
+
+/* Scrollbar (subtle) */
+::-webkit-scrollbar {
+	width: 6px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: #333;
+	border-radius: 3px;
+}
+
+/* Focus ring */
+:focus-visible {
+	outline: 2px solid var(--color-vault-green);
+	outline-offset: 2px;
+}
