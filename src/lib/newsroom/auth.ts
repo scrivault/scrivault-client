@@ -16,26 +16,44 @@ export interface AuthState {
 	token: string | null;
 	user: NewsroomUser | null;
 	expiresAt: number | null; // Unix ms
+	privateKey: Uint8Array | null; // X25519 private key (in-memory only)
+	publicKey: Uint8Array | null; // X25519 public key (in-memory only)
 }
 
 export const newsroomAuth = writable<AuthState>({
 	token: null,
 	user: null,
-	expiresAt: null
+	expiresAt: null,
+	privateKey: null,
+	publicKey: null
 });
 
-/** Set auth state after login. */
-export function setAuth(token: string, user: NewsroomUser, expiresAt: string): void {
+/** Set auth state after login. Optionally includes decrypted keypair. */
+export function setAuth(
+	token: string,
+	user: NewsroomUser,
+	expiresAt: string,
+	privateKey?: Uint8Array | null,
+	publicKey?: Uint8Array | null,
+): void {
 	newsroomAuth.set({
 		token,
 		user,
-		expiresAt: new Date(expiresAt).getTime()
+		expiresAt: new Date(expiresAt).getTime(),
+		privateKey: privateKey ?? null,
+		publicKey: publicKey ?? null
 	});
 }
 
-/** Clear auth state (logout). */
+/** Clear auth state (logout). Wipes key material from memory. */
 export function clearAuth(): void {
-	newsroomAuth.set({ token: null, user: null, expiresAt: null });
+	newsroomAuth.set({
+		token: null,
+		user: null,
+		expiresAt: null,
+		privateKey: null,
+		publicKey: null
+	});
 }
 
 /** Check if the stored token is still valid. */

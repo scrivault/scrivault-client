@@ -31,12 +31,18 @@ export function fromBase64(b64: string): Uint8Array {
 
 // ── Request types (what we send — base64 encoded) ──────────────
 
+export interface KeyGrantPayload {
+	journalist_id: string;
+	sealed_key: string; // base64
+}
+
 export interface CreateTipRequest {
 	blinded_id: string;
 	ciphertext: string; // base64
 	nonce: string;      // base64
 	salt: string;       // base64
 	sender_role?: 'source' | 'journalist';
+	key_grants?: KeyGrantPayload[];
 }
 
 export interface AddMessageRequest {

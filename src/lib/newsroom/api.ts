@@ -20,7 +20,10 @@ import type {
 	CreateInvestigationRequest,
 	InvestigationSummary,
 	InvestigationListResponse,
-	InvestigationDetailResponse
+	InvestigationDetailResponse,
+	PublicKeysResponse,
+	SealedKeyResponse,
+	CreateKeyGrantRequest
 } from './types';
 
 const BASE = '/api';
@@ -124,6 +127,35 @@ export const newsroomApi = {
 		return authRequest<InvestigationDetailResponse>(
 			`/newsroom/investigations/${encodeURIComponent(id)}`,
 			requireToken()
+		);
+	},
+
+	// Key exchange
+
+	/** Fetch editor public keys (public endpoint, no auth). */
+	getEditorPublicKeys(): Promise<PublicKeysResponse> {
+		return publicRequest<PublicKeysResponse>('/newsroom/pubkeys?role=editor');
+	},
+
+	/** Fetch reporter public keys (public endpoint, no auth). */
+	getReporterPublicKeys(): Promise<PublicKeysResponse> {
+		return publicRequest<PublicKeysResponse>('/newsroom/pubkeys?role=reporter');
+	},
+
+	/** Get the sealed thread key for the current journalist. */
+	getSealedKey(threadId: string): Promise<SealedKeyResponse> {
+		return authRequest<SealedKeyResponse>(
+			`/newsroom/tips/${encodeURIComponent(threadId)}/key`,
+			requireToken()
+		);
+	},
+
+	/** Grant a sealed thread key to another journalist (editor-only). */
+	grantKey(threadId: string, req: CreateKeyGrantRequest): Promise<SealedKeyResponse> {
+		return authRequest<SealedKeyResponse>(
+			`/newsroom/tips/${encodeURIComponent(threadId)}/grant`,
+			requireToken(),
+			{ method: 'POST', body: JSON.stringify(req) }
 		);
 	}
 };

@@ -14,8 +14,16 @@ import {
 	encryptString,
 	decryptString,
 	hashDocumentHex,
-	ensureReady
+	ensureReady,
+	// Key exchange primitives
+	generateKeypair,
+	publicKeyFromPrivate,
+	sealForRecipient,
+	unsealWithKeypair,
+	encryptPrivateKey as protoEncryptPrivateKey,
+	decryptPrivateKey as protoDecryptPrivateKey,
 } from '@scrivault/protocol';
+import type { Keypair } from '@scrivault/protocol';
 
 export { ensureReady, validatePassphrase };
 
@@ -159,6 +167,84 @@ export async function decryptFile(
  */
 export async function hashFile(data: Uint8Array): Promise<string> {
 	return hashDocumentHex(data);
+}
+
+// ── Key exchange (Bitwarden-style) ────────────────────────────
+
+export type { Keypair };
+
+/**
+ * Generate a fresh X25519 keypair for sealed-box key exchange.
+ * Called during journalist registration.
+ */
+export async function generateJournalistKeypair(): Promise<Keypair> {
+	await ensureReady();
+	return generateKeypair();
+}
+
+/**
+ * Encrypt a journalist's private key with their password.
+ * Uses Argon2id to derive a key from the password, then XChaCha20-Poly1305.
+ * Returns ciphertext, nonce, and the salt used for Argon2id.
+ */
+export async function encryptPrivateKeyWithPassword(
+	privateKey: Uint8Array,
+	password: string,
+): Promise<{ ciphertext: Uint8Array; nonce: Uint8Array; salt: Uint8Array }> {
+	await ensureReady();
+	const salt = await createSalt();
+	const passwordKey = await deriveThreadKey(password, salt);
+	const { ciphertext, nonce } = await protoEncryptPrivateKey(privateKey, passwordKey);
+	return { ciphertext, nonce, salt };
+}
+
+/**
+ * Decrypt a journalist's private key from encrypted storage.
+ * Derives the password key via Argon2id, then decrypts with XChaCha20-Poly1305.
+ */
+export async function decryptPrivateKeyWithPassword(
+	ciphertext: Uint8Array,
+	nonce: Uint8Array,
+	salt: Uint8Array,
+	password: string,
+): Promise<Uint8Array> {
+	await ensureReady();
+	const passwordKey = await deriveThreadKey(password, salt);
+	return protoDecryptPrivateKey(ciphertext, nonce, passwordKey);
+}
+
+/**
+ * Seal a symmetric thread key for a journalist using their X25519 public key.
+ * Used by sources (seal for editors) and editors (re-seal for reporters).
+ */
+export async function sealThreadKeyForJournalist(
+	threadKey: Uint8Array,
+	recipientPubKey: Uint8Array,
+): Promise<Uint8Array> {
+	await ensureReady();
+	return sealForRecipient(threadKey, recipientPubKey);
+}
+
+/**
+ * Unseal a thread key from a sealed box using the journalist's keypair.
+ * Returns the 32-byte symmetric thread key.
+ */
+export async function unsealThreadKey(
+	sealed: Uint8Array,
+	publicKey: Uint8Array,
+	privateKey: Uint8Array,
+): Promise<Uint8Array> {
+	await ensureReady();
+	return unsealWithKeypair(sealed, publicKey, privateKey);
+}
+
+/**
+ * Derive the X25519 public key from a private key.
+ * Used after login to reconstruct the public key from the decrypted private key.
+ */
+export async function derivePublicKey(privateKey: Uint8Array): Promise<Uint8Array> {
+	await ensureReady();
+	return publicKeyFromPrivate(privateKey);
 }
 
 // ── Helpers ────────────────────────────────────────────────────

@@ -1,12 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { api, toBase64 } from '$lib/api';
+	import type { KeyGrantPayload } from '$lib/api';
 	import {
 		createThreadKeys,
 		encryptMessage,
 		encryptFile,
-		hashFile
+		hashFile,
+		sealThreadKeyForJournalist,
+		fromBase64
 	} from '$lib/crypto';
+	import { newsroomApi } from '$lib/newsroom/api';
 	import { pendingPassphrase, threadId, threadKey, threadSalt } from '$lib/stores';
 
 	let topic = $state('');
@@ -46,13 +50,39 @@
 
 			const encrypted = await encryptMessage(plaintext, keys.derivedKey);
 
+			// Seal thread key for all editors (graceful degradation if fetch fails)
+			let keyGrants: KeyGrantPayload[] = [];
+			try {
+				const pubkeysRes = await newsroomApi.getEditorPublicKeys();
+				if (pubkeysRes.keys && pubkeysRes.keys.length > 0) {
+					const grants = await Promise.all(
+						pubkeysRes.keys.map(async (editor) => {
+							const sealed = await sealThreadKeyForJournalist(
+								keys.derivedKey,
+								fromBase64(editor.public_key)
+							);
+							return {
+								journalist_id: editor.journalist_id,
+								sealed_key: toBase64(sealed)
+							};
+						})
+					);
+					keyGrants = grants;
+				}
+			} catch {
+				// No editors registered or server unreachable — submit tip without grants.
+				// Journalists won't be able to decrypt until manual re-grant flow (future feature).
+				console.warn('Could not fetch editor public keys — submitting without key grants');
+			}
+
 			// Submit encrypted tip to server
 			const res = await api.createTip({
 				blinded_id: keys.blindedId,
 				ciphertext: toBase64(encrypted.ciphertext),
 				nonce: toBase64(encrypted.nonce),
 				salt: toBase64(keys.salt),
-				sender_role: 'source'
+				sender_role: 'source',
+				key_grants: keyGrants.length > 0 ? keyGrants : undefined
 			});
 
 			// Upload files if any

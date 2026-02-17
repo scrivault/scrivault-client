@@ -2,12 +2,20 @@
 	import { goto } from '$app/navigation';
 	import { newsroomApi } from '$lib/newsroom/api';
 	import { setAuth } from '$lib/newsroom/auth';
+	import {
+		generateJournalistKeypair,
+		encryptPrivateKeyWithPassword,
+		decryptPrivateKeyWithPassword,
+		derivePublicKey,
+		toBase64
+	} from '$lib/crypto';
 
 	let email = $state('');
 	let displayName = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
 	let submitting = $state(false);
+	let statusText = $state('');
 	let error = $state('');
 
 	const passwordsMatch = $derived(password === confirmPassword);
@@ -23,17 +31,50 @@
 		error = '';
 
 		try {
+			// Generate X25519 keypair and encrypt private key with password
+			statusText = 'Generating encryption keys…';
+			const keypair = await generateJournalistKeypair();
+			const encKey = await encryptPrivateKeyWithPassword(keypair.privateKey, password);
+
+			statusText = 'Creating account…';
 			await newsroomApi.register({
 				email: email.trim(),
 				password,
-				display_name: displayName.trim()
+				display_name: displayName.trim(),
+				public_key: toBase64(keypair.publicKey),
+				encrypted_private_key: toBase64(encKey.ciphertext),
+				private_key_nonce: toBase64(encKey.nonce),
+				key_salt: toBase64(encKey.salt)
 			});
 
 			// Auto-login after registration
+			statusText = 'Signing in…';
 			const loginRes = await newsroomApi.login({
 				email: email.trim(),
 				password
 			});
+
+			// Decrypt private key from login response (or use the one we just generated)
+			let privateKey = keypair.privateKey;
+			let publicKey = keypair.publicKey;
+
+			// If the login response includes encrypted key material, decrypt it
+			// (validates the round-trip — ensures what we stored can be recovered)
+			if (loginRes.encrypted_private_key && loginRes.private_key_nonce && loginRes.key_salt) {
+				try {
+					const { fromBase64 } = await import('$lib/crypto');
+					privateKey = await decryptPrivateKeyWithPassword(
+						fromBase64(loginRes.encrypted_private_key),
+						fromBase64(loginRes.private_key_nonce),
+						fromBase64(loginRes.key_salt),
+						password
+					);
+					publicKey = await derivePublicKey(privateKey);
+				} catch {
+					// Fallback to the keypair we just generated
+					console.warn('Failed to decrypt key from login response, using generated keypair');
+				}
+			}
 
 			setAuth(
 				loginRes.token,
@@ -43,7 +84,9 @@
 					display_name: displayName.trim(),
 					role: loginRes.role
 				},
-				loginRes.expires_at
+				loginRes.expires_at,
+				privateKey,
+				publicKey
 			);
 
 			goto('/newsroom/tips');
@@ -51,6 +94,7 @@
 			error = err instanceof Error ? err.message : 'Registration failed.';
 		} finally {
 			submitting = false;
+			statusText = '';
 		}
 	}
 </script>
@@ -169,7 +213,7 @@
 				disabled={!canSubmit}
 				class="w-full py-2.5 rounded-lg bg-white text-vault-bg text-sm font-medium transition-colors hover:bg-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed"
 			>
-				{submitting ? 'Creating account…' : 'Create account'}
+				{submitting ? (statusText || 'Creating account…') : 'Create account'}
 			</button>
 		</form>
 

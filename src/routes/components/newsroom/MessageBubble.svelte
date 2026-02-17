@@ -1,9 +1,16 @@
 <script lang="ts">
 	import type { NewsroomMessage } from '$lib/newsroom/types';
 
-	let { message }: { message: NewsroomMessage } = $props();
+	let {
+		message,
+		decryptedText = undefined
+	}: {
+		message: NewsroomMessage;
+		decryptedText?: string | undefined;
+	} = $props();
 
 	const isSource = $derived(message.sender_role === 'source');
+	const isDecrypted = $derived(decryptedText !== undefined);
 
 	function formatTime(iso: string): string {
 		const date = new Date(iso);
@@ -43,15 +50,28 @@
 			</span>
 		</div>
 
-		<!-- Encrypted content -->
-		<div class="font-mono text-[11px] text-vault-text-muted break-all leading-relaxed">
-			{truncateCiphertext(message.ciphertext)}
-		</div>
-		<div class="mt-1.5 flex items-center gap-1.5">
-			<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
-			<span class="font-mono text-[9px] text-vault-text-dim uppercase tracking-wider">
-				Encrypted
-			</span>
-		</div>
+		{#if isDecrypted}
+			<!-- Decrypted plaintext content -->
+			<div class="text-sm text-vault-text whitespace-pre-wrap leading-relaxed">
+				{decryptedText}
+			</div>
+			<div class="mt-1.5 flex items-center gap-1.5">
+				<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
+				<span class="font-mono text-[9px] text-vault-green/70 uppercase tracking-wider">
+					Decrypted
+				</span>
+			</div>
+		{:else}
+			<!-- Encrypted content (no key) -->
+			<div class="font-mono text-[11px] text-vault-text-muted break-all leading-relaxed">
+				{truncateCiphertext(message.ciphertext)}
+			</div>
+			<div class="mt-1.5 flex items-center gap-1.5">
+				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
+				<span class="font-mono text-[9px] text-vault-text-dim uppercase tracking-wider">
+					Encrypted
+				</span>
+			</div>
+		{/if}
 	</div>
 </div>

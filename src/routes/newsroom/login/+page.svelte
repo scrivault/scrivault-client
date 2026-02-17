@@ -2,10 +2,16 @@
 	import { goto } from '$app/navigation';
 	import { newsroomApi } from '$lib/newsroom/api';
 	import { setAuth } from '$lib/newsroom/auth';
+	import {
+		decryptPrivateKeyWithPassword,
+		derivePublicKey,
+		fromBase64
+	} from '$lib/crypto';
 
 	let email = $state('');
 	let password = $state('');
 	let submitting = $state(false);
+	let statusText = $state('');
 	let error = $state('');
 
 	async function handleSubmit() {
@@ -15,7 +21,30 @@
 		error = '';
 
 		try {
+			statusText = 'Authenticating…';
 			const res = await newsroomApi.login({ email: email.trim(), password });
+
+			// Decrypt private key from server-stored encrypted material
+			let privateKey: Uint8Array | null = null;
+			let publicKey: Uint8Array | null = null;
+
+			if (res.encrypted_private_key && res.private_key_nonce && res.key_salt) {
+				try {
+					statusText = 'Decrypting credentials…';
+					privateKey = await decryptPrivateKeyWithPassword(
+						fromBase64(res.encrypted_private_key),
+						fromBase64(res.private_key_nonce),
+						fromBase64(res.key_salt),
+						password
+					);
+					publicKey = await derivePublicKey(privateKey);
+				} catch {
+					// Graceful degradation: continue without key material.
+					// The journalist won't be able to decrypt tips, but can still
+					// access the dashboard and see encrypted placeholders.
+					console.warn('Failed to decrypt private key — continuing without decryption capability');
+				}
+			}
 
 			setAuth(
 				res.token,
@@ -25,7 +54,9 @@
 					display_name: email.trim(),
 					role: res.role
 				},
-				res.expires_at
+				res.expires_at,
+				privateKey,
+				publicKey
 			);
 
 			goto('/newsroom/tips');
@@ -33,6 +64,7 @@
 			error = err instanceof Error ? err.message : 'Login failed.';
 		} finally {
 			submitting = false;
+			statusText = '';
 		}
 	}
 </script>
@@ -109,7 +141,7 @@
 				disabled={submitting || !email.trim() || !password}
 				class="w-full py-2.5 rounded-lg bg-white text-vault-bg text-sm font-medium transition-colors hover:bg-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed"
 			>
-				{submitting ? 'Signing in…' : 'Sign in'}
+				{submitting ? (statusText || 'Signing in…') : 'Sign in'}
 			</button>
 		</form>
 

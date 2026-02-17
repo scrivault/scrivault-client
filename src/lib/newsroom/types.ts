@@ -15,6 +15,9 @@ export interface LoginResponse {
 	journalist_id: string;
 	role: 'editor' | 'reporter';
 	expires_at: string;
+	encrypted_private_key?: string; // base64
+	private_key_nonce?: string; // base64
+	key_salt?: string; // base64
 }
 
 export interface RegisterRequest {
@@ -22,6 +25,10 @@ export interface RegisterRequest {
 	password: string;
 	display_name: string;
 	role?: 'editor' | 'reporter';
+	public_key?: string; // base64
+	encrypted_private_key?: string; // base64
+	private_key_nonce?: string; // base64
+	key_salt?: string; // base64
 }
 
 export interface RegisterResponse {
@@ -124,4 +131,24 @@ export interface InvestigationDetailResponse {
 	created_at: string;
 	updated_at: string;
 	members: InvestigationMember[];
+}
+
+// ── Key Exchange ─────────────────────────────────────────
+
+export interface PublicKeyPayload {
+	journalist_id: string;
+	public_key: string; // base64
+}
+
+export interface PublicKeysResponse {
+	keys: PublicKeyPayload[];
+}
+
+export interface SealedKeyResponse {
+	sealed_key: string; // base64
+}
+
+export interface CreateKeyGrantRequest {
+	journalist_id: string;
+	sealed_key: string; // base64
 }
