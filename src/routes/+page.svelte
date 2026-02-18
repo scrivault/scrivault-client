@@ -11,7 +11,10 @@
 		fromBase64
 	} from '$lib/crypto';
 	import { newsroomApi } from '$lib/newsroom/api';
+	import { orgStore } from '$lib/newsroom/org';
 	import { pendingPassphrase, threadId, threadKey, threadSalt } from '$lib/stores';
+
+	const org = $derived($orgStore);
 
 	let topic = $state('');
 	let subject = $state('');
@@ -126,7 +129,7 @@
 </script>
 
 <svelte:head>
-	<title>Submit a Tip — Scrivault</title>
+	<title>Submit a Tip — {org?.name ?? 'Scrivault'}</title>
 </svelte:head>
 
 <div class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
@@ -139,9 +142,9 @@
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
 					</svg>
 				</div>
-				<span class="font-mono text-sm text-vault-text-muted tracking-wider uppercase">Scrivault</span>
+				<span class="font-mono text-sm text-vault-text-muted tracking-wider uppercase">{org?.name ?? 'Scrivault'}</span>
 			</div>
-			<h1 class="text-2xl font-semibold text-vault-text mb-2">Submit a Secure Tip</h1>
+			<h1 class="text-2xl font-semibold text-vault-text mb-2">{org ? `${org.name} Secure Tip Line` : 'Submit a Secure Tip'}</h1>
 			<p class="text-sm text-vault-text-muted max-w-md mx-auto">
 				Your message is encrypted in your browser before transmission.
 				No account required. No identifying information collected.

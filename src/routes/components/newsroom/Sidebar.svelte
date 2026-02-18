@@ -2,14 +2,18 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { newsroomAuth, clearAuth } from '$lib/newsroom/auth';
+	import { orgStore } from '$lib/newsroom/org';
 
 	const currentPath = $derived($page.url.pathname as string);
 	const isTipsActive = $derived(
 		currentPath === '/newsroom/tips' || currentPath.startsWith('/newsroom/tips/')
 	);
 	const isInvestigationsActive = $derived(currentPath.startsWith('/newsroom/investigations'));
+	const isTeamActive = $derived(currentPath.startsWith('/newsroom/team'));
 
 	const user = $derived($newsroomAuth.user);
+	const org = $derived($orgStore);
+	const isEditor = $derived(user?.role === 'editor');
 
 	function initials(name: string): string {
 		return name
@@ -32,7 +36,7 @@
 	<!-- Brand -->
 	<div class="px-5 py-5 border-b border-vault-border">
 		<h1 class="font-mono text-xs font-semibold tracking-[2px] uppercase text-vault-text">
-			Scrivault
+			{org?.name ?? 'Scrivault'}
 		</h1>
 		<p class="text-[11px] text-vault-text-dim mt-1">Newsroom</p>
 	</div>
@@ -67,23 +71,21 @@
 			<span>All Investigations</span>
 		</a>
 
-		<!-- Team placeholder -->
-		<div
-			class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim px-3 mt-5 mb-2"
-		>
-			Team
-		</div>
-		{#if user}
-			<div class="flex items-center gap-2 px-3 py-2 text-[13px] text-vault-text-muted">
-				<div
-					class="w-5 h-5 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center"
-				>
-					<span class="font-mono text-[8px] text-vault-text-dim">
-						{initials(user.display_name)}
-					</span>
-				</div>
-				<span>{user.display_name}</span>
+		{#if isEditor}
+			<div
+				class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim px-3 mt-5 mb-2"
+			>
+				Team
 			</div>
+			<a
+				href="/newsroom/team"
+				class="flex items-center justify-between px-3 py-2 rounded text-[13px] transition-colors
+					{isTeamActive
+					? 'bg-vault-surface-raised text-vault-text border border-vault-border'
+					: 'text-vault-text-muted hover:text-vault-text hover:bg-vault-surface-raised/50'}"
+			>
+				<span>Manage Team</span>
+			</a>
 		{/if}
 	</nav>
 

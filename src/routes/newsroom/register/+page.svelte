@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { newsroomApi } from '$lib/newsroom/api';
 	import { setAuth } from '$lib/newsroom/auth';
@@ -7,8 +8,11 @@
 		encryptPrivateKeyWithPassword,
 		decryptPrivateKeyWithPassword,
 		derivePublicKey,
-		toBase64
+		toBase64,
+		fromBase64
 	} from '$lib/crypto';
+
+	const inviteToken = $derived($page.url.searchParams.get('token') ?? '');
 
 	let email = $state('');
 	let displayName = $state('');
@@ -25,7 +29,7 @@
 	);
 
 	async function handleSubmit() {
-		if (!canSubmit) return;
+		if (!canSubmit || !inviteToken) return;
 
 		submitting = true;
 		error = '';
@@ -41,6 +45,7 @@
 				email: email.trim(),
 				password,
 				display_name: displayName.trim(),
+				invite_token: inviteToken,
 				public_key: toBase64(keypair.publicKey),
 				encrypted_private_key: toBase64(encKey.ciphertext),
 				private_key_nonce: toBase64(encKey.nonce),
@@ -54,15 +59,12 @@
 				password
 			});
 
-			// Decrypt private key from login response (or use the one we just generated)
+			// Decrypt private key from login response (validates the round-trip)
 			let privateKey = keypair.privateKey;
 			let publicKey = keypair.publicKey;
 
-			// If the login response includes encrypted key material, decrypt it
-			// (validates the round-trip — ensures what we stored can be recovered)
 			if (loginRes.encrypted_private_key && loginRes.private_key_nonce && loginRes.key_salt) {
 				try {
-					const { fromBase64 } = await import('$lib/crypto');
 					privateKey = await decryptPrivateKeyWithPassword(
 						fromBase64(loginRes.encrypted_private_key),
 						fromBase64(loginRes.private_key_nonce),
@@ -113,119 +115,151 @@
 			<p class="text-sm text-vault-text-dim mt-2">Create Account</p>
 		</div>
 
-		<!-- Form -->
-		<form
-			onsubmit={(e) => {
-				e.preventDefault();
-				handleSubmit();
-			}}
-			autocomplete="off"
-			class="space-y-4"
-		>
-			{#if error}
+		{#if !inviteToken}
+			<!-- No invite token — show gate message -->
+			<div class="text-center space-y-4">
 				<div
-					class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-vault-red-muted border border-vault-red/30"
+					class="flex items-center gap-2 px-4 py-3 rounded-lg bg-vault-surface border border-vault-border"
 				>
-					<span class="text-sm text-vault-red">{error}</span>
+					<svg
+						class="w-4 h-4 text-vault-amber shrink-0"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+						/>
+					</svg>
+					<p class="text-sm text-vault-text-muted">
+						Registration is invite-only. Ask an editor for an invitation link.
+					</p>
 				</div>
-			{/if}
-
-			<div>
-				<label
-					for="email"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+				<a
+					href="/newsroom/login"
+					class="inline-block text-[12px] text-vault-text-muted hover:text-vault-text underline underline-offset-2 transition-colors"
 				>
-					Email
-				</label>
-				<input
-					id="email"
-					type="email"
-					bind:value={email}
-					required
-					autocomplete="email"
-					class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-					placeholder="you@newsroom.org"
-				/>
+					Back to login
+				</a>
 			</div>
-
-			<div>
-				<label
-					for="display-name"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
-				>
-					Display Name
-				</label>
-				<input
-					id="display-name"
-					type="text"
-					bind:value={displayName}
-					required
-					autocomplete="name"
-					class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-					placeholder="Your name"
-				/>
-			</div>
-
-			<div>
-				<label
-					for="password"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
-				>
-					Password
-				</label>
-				<input
-					id="password"
-					type="password"
-					bind:value={password}
-					required
-					autocomplete="new-password"
-					class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-					placeholder="Min 12 characters"
-				/>
-				{#if password && !passwordLongEnough}
-					<p class="text-[11px] text-vault-amber mt-1">Minimum 12 characters required</p>
-				{/if}
-			</div>
-
-			<div>
-				<label
-					for="confirm-password"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
-				>
-					Confirm Password
-				</label>
-				<input
-					id="confirm-password"
-					type="password"
-					bind:value={confirmPassword}
-					required
-					autocomplete="new-password"
-					class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-					placeholder="Repeat password"
-				/>
-				{#if confirmPassword && !passwordsMatch}
-					<p class="text-[11px] text-vault-red mt-1">Passwords do not match</p>
-				{/if}
-			</div>
-
-			<button
-				type="submit"
-				disabled={!canSubmit}
-				class="w-full py-2.5 rounded-lg bg-white text-vault-bg text-sm font-medium transition-colors hover:bg-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed"
+		{:else}
+			<!-- Invite token present — show registration form -->
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					handleSubmit();
+				}}
+				autocomplete="off"
+				class="space-y-4"
 			>
-				{submitting ? (statusText || 'Creating account…') : 'Create account'}
-			</button>
-		</form>
+				{#if error}
+					<div
+						class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-vault-red-muted border border-vault-red/30"
+					>
+						<span class="text-sm text-vault-red">{error}</span>
+					</div>
+				{/if}
 
-		<!-- Login link -->
-		<p class="text-center text-[12px] text-vault-text-dim mt-6">
-			Already have an account?
-			<a
-				href="/newsroom/login"
-				class="text-vault-text-muted hover:text-vault-text underline underline-offset-2 transition-colors"
-			>
-				Sign in
-			</a>
-		</p>
+				<div>
+					<label
+						for="email"
+						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					>
+						Email
+					</label>
+					<input
+						id="email"
+						type="email"
+						bind:value={email}
+						required
+						autocomplete="email"
+						class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
+						placeholder="you@newsroom.org"
+					/>
+				</div>
+
+				<div>
+					<label
+						for="display-name"
+						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					>
+						Display Name
+					</label>
+					<input
+						id="display-name"
+						type="text"
+						bind:value={displayName}
+						required
+						autocomplete="name"
+						class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
+						placeholder="Your name"
+					/>
+				</div>
+
+				<div>
+					<label
+						for="password"
+						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					>
+						Password
+					</label>
+					<input
+						id="password"
+						type="password"
+						bind:value={password}
+						required
+						autocomplete="new-password"
+						class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
+						placeholder="Min 12 characters"
+					/>
+					{#if password && !passwordLongEnough}
+						<p class="text-[11px] text-vault-amber mt-1">Minimum 12 characters required</p>
+					{/if}
+				</div>
+
+				<div>
+					<label
+						for="confirm-password"
+						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					>
+						Confirm Password
+					</label>
+					<input
+						id="confirm-password"
+						type="password"
+						bind:value={confirmPassword}
+						required
+						autocomplete="new-password"
+						class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
+						placeholder="Repeat password"
+					/>
+					{#if confirmPassword && !passwordsMatch}
+						<p class="text-[11px] text-vault-red mt-1">Passwords do not match</p>
+					{/if}
+				</div>
+
+				<button
+					type="submit"
+					disabled={!canSubmit}
+					class="w-full py-2.5 rounded-lg bg-white text-vault-bg text-sm font-medium transition-colors hover:bg-neutral-200 disabled:opacity-30 disabled:cursor-not-allowed"
+				>
+					{submitting ? (statusText || 'Creating account…') : 'Create account'}
+				</button>
+			</form>
+
+			<!-- Login link -->
+			<p class="text-center text-[12px] text-vault-text-dim mt-6">
+				Already have an account?
+				<a
+					href="/newsroom/login"
+					class="text-vault-text-muted hover:text-vault-text underline underline-offset-2 transition-colors"
+				>
+					Sign in
+				</a>
+			</p>
+		{/if}
 	</div>
 </div>

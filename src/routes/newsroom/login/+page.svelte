@@ -145,15 +145,8 @@
 			</button>
 		</form>
 
-		<!-- Register link -->
 		<p class="text-center text-[12px] text-vault-text-dim mt-6">
-			No account?
-			<a
-				href="/newsroom/register"
-				class="text-vault-text-muted hover:text-vault-text underline underline-offset-2 transition-colors"
-			>
-				Register
-			</a>
+			Registration is invite-only. Contact an editor for access.
 		</p>
 	</div>
 </div>

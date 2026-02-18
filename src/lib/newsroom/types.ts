@@ -24,6 +24,7 @@ export interface RegisterRequest {
 	email: string;
 	password: string;
 	display_name: string;
+	invite_token: string;
 	role?: 'editor' | 'reporter';
 	public_key?: string; // base64
 	encrypted_private_key?: string; // base64
@@ -151,4 +152,56 @@ export interface SealedKeyResponse {
 export interface CreateKeyGrantRequest {
 	journalist_id: string;
 	sealed_key: string; // base64
+}
+
+// ── Setup ────────────────────────────────────────────────
+
+export interface SetupRequest {
+	org_name: string;
+	org_slug: string;
+	admin_email: string;
+	admin_display_name: string;
+	admin_password: string;
+	public_key?: string; // base64
+	encrypted_private_key?: string; // base64
+	private_key_nonce?: string; // base64
+	key_salt?: string; // base64
+}
+
+export interface SetupResponse {
+	token: string;
+	journalist_id: string;
+	role: string;
+	expires_at: string;
+	organization: OrganizationInfo;
+}
+
+export interface SetupStatusResponse {
+	needs_setup: boolean;
+	organization?: OrganizationInfo;
+}
+
+export interface OrganizationInfo {
+	name: string;
+	slug: string;
+}
+
+// ── Invites ──────────────────────────────────────────────
+
+export interface CreateInviteRequest {
+	email: string;
+	role: 'editor' | 'reporter';
+}
+
+export interface InviteResponse {
+	id: string;
+	email: string;
+	role: string;
+	token?: string; // Only returned on create, not on list
+	created_at: string;
+	expires_at: string;
+}
+
+export interface InviteListResponse {
+	invites: InviteResponse[];
 }

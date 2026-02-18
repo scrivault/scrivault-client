@@ -23,7 +23,14 @@ import type {
 	InvestigationDetailResponse,
 	PublicKeysResponse,
 	SealedKeyResponse,
-	CreateKeyGrantRequest
+	CreateKeyGrantRequest,
+	SetupRequest,
+	SetupResponse,
+	SetupStatusResponse,
+	OrganizationInfo,
+	CreateInviteRequest,
+	InviteResponse,
+	InviteListResponse
 } from './types';
 
 const BASE = '/api';
@@ -157,5 +164,61 @@ export const newsroomApi = {
 			requireToken(),
 			{ method: 'POST', body: JSON.stringify(req) }
 		);
+	},
+
+	// Setup (public)
+
+	/** Check if the instance needs first-run setup. */
+	getSetupStatus(): Promise<SetupStatusResponse> {
+		return publicRequest<SetupStatusResponse>('/setup/status');
+	},
+
+	/** Create organization and first editor account (first-run only). */
+	setup(req: SetupRequest): Promise<SetupResponse> {
+		return publicRequest<SetupResponse>('/setup', {
+			method: 'POST',
+			body: JSON.stringify(req)
+		});
+	},
+
+	/** Get public org info for branding. */
+	getOrganization(): Promise<OrganizationInfo> {
+		return publicRequest<OrganizationInfo>('/organization');
+	},
+
+	// Invites (protected, editor-only)
+
+	/** Create an invite for a new journalist. */
+	createInvite(req: CreateInviteRequest): Promise<InviteResponse> {
+		return authRequest<InviteResponse>('/newsroom/invites', requireToken(), {
+			method: 'POST',
+			body: JSON.stringify(req)
+		});
+	},
+
+	/** List pending (unused, unexpired) invites. */
+	getInvites(): Promise<InviteListResponse> {
+		return authRequest<InviteListResponse>('/newsroom/invites', requireToken());
+	},
+
+	/** Revoke an invite by ID. Returns 204 No Content on success. */
+	async revokeInvite(id: string): Promise<void> {
+		const token = requireToken();
+		const res = await fetch(`${BASE}/newsroom/invites/${encodeURIComponent(id)}`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		if (!res.ok) {
+			let code = 'unknown';
+			let message = 'Failed to revoke invite';
+			try {
+				const body = await res.json();
+				code = body.code ?? code;
+				message = body.error ?? message;
+			} catch {
+				// Non-JSON error body
+			}
+			throw new ApiError(res.status, code, message);
+		}
 	}
 };
