@@ -1,27 +1,26 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { newsroomApi } from '$lib/newsroom/api';
-	import type { TipSummary, TipStatus } from '$lib/newsroom/types';
+	import { newsroomAuth } from '$lib/newsroom/auth';
+	import type { TipSummary, TipStatus, TipFilterParams } from '$lib/newsroom/types';
 	import TipTable from '../../components/newsroom/TipTable.svelte';
 	import EmptyState from '../../components/newsroom/EmptyState.svelte';
+
+	const user = $derived($newsroomAuth.user);
 
 	let tips: TipSummary[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
 	let statusFilter: TipStatus | 'all' = $state('all');
 
-	// Filtered tips
-	const filteredTips = $derived(
-		statusFilter === 'all' ? tips : tips.filter((t) => t.status === statusFilter)
-	);
-
-	// Stats
+	// Stats (always from the full 'all' load cached at mount)
+	let allTips: TipSummary[] = $state([]);
 	const stats = $derived({
-		total: tips.length,
-		new: tips.filter((t) => t.status === 'new').length,
-		review: tips.filter((t) => t.status === 'review').length,
-		active: tips.filter((t) => t.status === 'active').length,
-		docs: tips.reduce((sum, t) => sum + t.document_count, 0)
+		total: allTips.length,
+		new: allTips.filter((t) => t.status === 'new').length,
+		review: allTips.filter((t) => t.status === 'review').length,
+		active: allTips.filter((t) => t.status === 'active').length,
+		docs: allTips.reduce((sum, t) => sum + t.document_count, 0)
 	});
 
 	const filters: { label: string; value: TipStatus | 'all' }[] = [
@@ -32,12 +31,16 @@
 		{ label: 'Closed', value: 'closed' }
 	];
 
-	async function loadTips() {
+	async function loadTips(filter?: TipFilterParams) {
 		loading = true;
 		error = '';
 		try {
-			const res = await newsroomApi.getTips();
+			const res = await newsroomApi.getTips(filter);
 			tips = res.tips ?? [];
+			// Cache full list for stats on initial/all load
+			if (!filter?.status) {
+				allTips = tips;
+			}
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load tips.';
 		} finally {
@@ -45,8 +48,23 @@
 		}
 	}
 
+	function handleFilterChange(value: TipStatus | 'all') {
+		statusFilter = value;
+		if (value === 'all') {
+			loadTips();
+		} else {
+			loadTips({ status: value });
+		}
+	}
+
 	function handleRowClick(tip: TipSummary) {
 		goto(`/newsroom/tips/${tip.id}`);
+	}
+
+	// Build filter params from current state
+	function currentFilter(): TipFilterParams | undefined {
+		if (statusFilter === 'all') return undefined;
+		return { status: statusFilter };
 	}
 
 	// Load on mount + poll every 30 seconds for new tips
@@ -54,12 +72,18 @@
 		loadTips();
 
 		const interval = setInterval(() => {
-			// Silent background refresh — don't show loading spinner
-			newsroomApi.getTips().then((res) => {
+			const filter = currentFilter();
+			newsroomApi.getTips(filter).then((res) => {
 				tips = res.tips ?? [];
 			}).catch(() => {
 				// Silent failure — will retry next interval
 			});
+			// Also refresh stats from full list
+			if (filter) {
+				newsroomApi.getTips().then((res) => {
+					allTips = res.tips ?? [];
+				}).catch(() => {});
+			}
 		}, 30_000);
 
 		return () => {
@@ -107,7 +131,7 @@
 			<div class="text-center">
 				<p class="text-sm text-vault-red mb-4">{error}</p>
 				<button
-					onclick={loadTips}
+					onclick={() => loadTips(currentFilter())}
 					class="text-sm text-vault-text-muted hover:text-vault-text underline underline-offset-2"
 				>
 					Try again
@@ -125,7 +149,7 @@
 		<div class="flex gap-1 mb-5">
 			{#each filters as f}
 				<button
-					onclick={() => (statusFilter = f.value)}
+					onclick={() => handleFilterChange(f.value)}
 					class="px-3 py-1.5 rounded text-[12px] font-mono transition-colors
 						{statusFilter === f.value
 						? 'bg-vault-surface-raised text-vault-text border border-vault-border'
@@ -137,10 +161,10 @@
 		</div>
 
 		<!-- Table -->
-		{#if filteredTips.length === 0}
+		{#if tips.length === 0}
 			<EmptyState message="No tips match this filter." />
 		{:else}
-			<TipTable tips={filteredTips} onRowClick={handleRowClick} />
+			<TipTable tips={tips} onRowClick={handleRowClick} currentUserId={user?.journalist_id ?? null} />
 		{/if}
 	{/if}
 </div>

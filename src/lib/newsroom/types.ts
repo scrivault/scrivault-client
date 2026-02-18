@@ -205,3 +205,42 @@ export interface InviteResponse {
 export interface InviteListResponse {
 	invites: InviteResponse[];
 }
+
+// ── Team ─────────────────────────────────────────────────
+
+export interface TeamMember {
+	id: string;
+	email: string;
+	display_name: string;
+	role: 'editor' | 'reporter';
+	created_at: string;
+}
+
+export interface TeamListResponse {
+	members: TeamMember[];
+}
+
+// ── Thread workflow ──────────────────────────────────────
+
+export interface UpdateStatusRequest {
+	status: TipStatus;
+}
+
+export interface AssignThreadRequest {
+	journalist_id: string;
+}
+
+export interface ThreadDetailResponse {
+	id: string;
+	status: TipStatus;
+	assigned_to?: string;
+	assigned_at?: string;
+	updated_at: string;
+}
+
+// ── Tip filter params ────────────────────────────────────
+
+export interface TipFilterParams {
+	status?: TipStatus;
+	assigned_to?: string;
+}

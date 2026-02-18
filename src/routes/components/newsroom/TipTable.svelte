@@ -4,10 +4,12 @@
 
 	let {
 		tips,
-		onRowClick
+		onRowClick,
+		currentUserId = null
 	}: {
 		tips: TipSummary[];
 		onRowClick: (tip: TipSummary) => void;
+		currentUserId?: string | null;
 	} = $props();
 
 	function formatTimeAgo(iso: string): string {
@@ -83,15 +85,23 @@
 				</td>
 				<td class="px-3 py-3.5 align-middle">
 					{#if tip.assignee_name}
+						{@const isMe = currentUserId && tip.assigned_to === currentUserId}
 						<div class="flex items-center gap-1.5">
 							<div
-								class="w-5 h-5 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center"
+								class="w-5 h-5 rounded-full flex items-center justify-center
+									{isMe
+									? 'bg-vault-green-muted border border-vault-green/30'
+									: 'bg-vault-surface-raised border border-vault-border'}"
 							>
-								<span class="font-mono text-[8px] text-vault-text-dim">
+								<span class="font-mono text-[8px] {isMe ? 'text-vault-green' : 'text-vault-text-dim'}">
 									{initials(tip.assignee_name)}
 								</span>
 							</div>
-							<span class="text-[12px] text-vault-text-muted">{tip.assignee_name}</span>
+							{#if isMe}
+								<span class="text-[12px] font-mono text-vault-green">You</span>
+							{:else}
+								<span class="text-[12px] text-vault-text-muted">{tip.assignee_name}</span>
+							{/if}
 						</div>
 					{:else}
 						<span class="text-[12px] text-vault-text-dim italic">Unassigned</span>

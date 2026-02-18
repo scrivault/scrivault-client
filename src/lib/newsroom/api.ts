@@ -14,6 +14,7 @@ import type {
 	TipListResponse,
 	TipUpdateRequest,
 	TipUpdateResponse,
+	TipFilterParams,
 	NewsroomMessagesResponse,
 	NewsroomSendMessageRequest,
 	NewsroomSendMessageResponse,
@@ -30,7 +31,11 @@ import type {
 	OrganizationInfo,
 	CreateInviteRequest,
 	InviteResponse,
-	InviteListResponse
+	InviteListResponse,
+	TeamListResponse,
+	UpdateStatusRequest,
+	AssignThreadRequest,
+	ThreadDetailResponse
 } from './types';
 
 const BASE = '/api';
@@ -84,8 +89,15 @@ export const newsroomApi = {
 
 	// Tips (protected)
 
-	getTips(): Promise<TipListResponse> {
-		return authRequest<TipListResponse>('/newsroom/tips', requireToken());
+	getTips(filter?: TipFilterParams): Promise<TipListResponse> {
+		const params = new URLSearchParams();
+		if (filter?.status) params.set('status', filter.status);
+		if (filter?.assigned_to) params.set('assigned_to', filter.assigned_to);
+		const qs = params.toString();
+		return authRequest<TipListResponse>(
+			`/newsroom/tips${qs ? `?${qs}` : ''}`,
+			requireToken()
+		);
 	},
 
 	updateTip(threadId: string, req: TipUpdateRequest): Promise<TipUpdateResponse> {
@@ -199,6 +211,42 @@ export const newsroomApi = {
 	/** List pending (unused, unexpired) invites. */
 	getInvites(): Promise<InviteListResponse> {
 		return authRequest<InviteListResponse>('/newsroom/invites', requireToken());
+	},
+
+	// Thread workflow (protected)
+
+	/** Update thread status. Any journalist on the thread can change status. */
+	updateThreadStatus(threadId: string, status: UpdateStatusRequest['status']): Promise<ThreadDetailResponse> {
+		return authRequest<ThreadDetailResponse>(
+			`/newsroom/threads/${encodeURIComponent(threadId)}/status`,
+			requireToken(),
+			{ method: 'PATCH', body: JSON.stringify({ status }) }
+		);
+	},
+
+	/** Assign a thread to a journalist. Editor-only. */
+	assignThread(threadId: string, journalistId: string): Promise<ThreadDetailResponse> {
+		return authRequest<ThreadDetailResponse>(
+			`/newsroom/threads/${encodeURIComponent(threadId)}/assign`,
+			requireToken(),
+			{ method: 'PATCH', body: JSON.stringify({ journalist_id: journalistId }) }
+		);
+	},
+
+	/** Unassign a thread. Editor-only. */
+	unassignThread(threadId: string): Promise<ThreadDetailResponse> {
+		return authRequest<ThreadDetailResponse>(
+			`/newsroom/threads/${encodeURIComponent(threadId)}/unassign`,
+			requireToken(),
+			{ method: 'PATCH' }
+		);
+	},
+
+	// Team (protected)
+
+	/** List all team members. */
+	getTeamMembers(): Promise<TeamListResponse> {
+		return authRequest<TeamListResponse>('/newsroom/team', requireToken());
 	},
 
 	/** Revoke an invite by ID. Returns 204 No Content on success. */

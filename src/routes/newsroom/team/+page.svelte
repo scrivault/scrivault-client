@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { newsroomApi } from '$lib/newsroom/api';
 	import { newsroomAuth } from '$lib/newsroom/auth';
-	import type { InviteResponse } from '$lib/newsroom/types';
+	import type { InviteResponse, TeamMember } from '$lib/newsroom/types';
 
 	let inviteEmail = $state('');
 	let inviteRole = $state<'editor' | 'reporter'>('reporter');
@@ -13,6 +13,10 @@
 	let invites = $state<InviteResponse[]>([]);
 	let loadingInvites = $state(true);
 	let revoking = $state<string | null>(null);
+
+	// Team members
+	let members = $state<TeamMember[]>([]);
+	let loadingMembers = $state(true);
 
 	// Tokens from invites created in this session (the list endpoint doesn't return tokens)
 	let tokenMap = $state<Record<string, string>>({});
@@ -30,12 +34,32 @@
 			.slice(0, 2);
 	}
 
+	function formatDate(iso: string): string {
+		return new Date(iso).toLocaleDateString(undefined, {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
 	function buildInviteLink(token: string): string {
 		return `${window.location.origin}/newsroom/register?token=${token}`;
 	}
 
 	function getToken(invite: InviteResponse): string | undefined {
 		return invite.token ?? tokenMap[invite.id];
+	}
+
+	async function loadTeamMembers() {
+		loadingMembers = true;
+		try {
+			const res = await newsroomApi.getTeamMembers();
+			members = res.members ?? [];
+		} catch {
+			members = [];
+		} finally {
+			loadingMembers = false;
+		}
 	}
 
 	async function loadInvites() {
@@ -107,6 +131,7 @@
 	}
 
 	onMount(() => {
+		loadTeamMembers();
 		loadInvites();
 	});
 </script>
@@ -123,30 +148,80 @@
 			<p class="text-sm text-vault-text-muted mt-1">Manage your newsroom team members.</p>
 		</div>
 
-		<!-- Current user -->
+		<!-- Team members list -->
 		<section>
 			<h2
 				class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mb-3"
 			>
-				Your Account
+				Members
 			</h2>
-			{#if user}
-				<div
-					class="flex items-center gap-3 p-4 rounded-lg bg-vault-surface border border-vault-border"
-				>
-					<div
-						class="w-9 h-9 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center"
-					>
-						<span class="font-mono text-xs text-vault-text-dim">
-							{initials(user.display_name)}
-						</span>
-					</div>
-					<div class="min-w-0">
-						<p class="text-sm text-vault-text">{user.display_name}</p>
-						<p class="font-mono text-[10px] text-vault-text-dim uppercase">
-							{user.role} &middot; {user.email}
-						</p>
-					</div>
+
+			{#if loadingMembers}
+				<div class="flex items-center gap-2 py-6 justify-center">
+					<svg class="w-4 h-4 animate-spin text-vault-text-dim" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					</svg>
+					<span class="text-sm text-vault-text-dim">Loading team…</span>
+				</div>
+			{:else if members.length === 0}
+				<div class="p-4 rounded-lg bg-vault-surface border border-vault-border text-center">
+					<p class="text-sm text-vault-text-dim">No team members found.</p>
+				</div>
+			{:else}
+				<div class="space-y-2">
+					{#each members as member (member.id)}
+						{@const isMe = user && member.id === user.journalist_id}
+						<div
+							class="flex items-center justify-between p-4 rounded-lg bg-vault-surface border border-vault-border"
+						>
+							<div class="flex items-center gap-3 min-w-0">
+								<div
+									class="w-9 h-9 rounded-full shrink-0 flex items-center justify-center
+										{isMe
+										? 'bg-vault-green-muted border border-vault-green/30'
+										: 'bg-vault-surface-raised border border-vault-border'}"
+								>
+									<span class="font-mono text-xs {isMe ? 'text-vault-green' : 'text-vault-text-dim'}">
+										{initials(member.display_name)}
+									</span>
+								</div>
+								<div class="min-w-0">
+									<div class="flex items-center gap-2">
+										<p class="text-sm text-vault-text truncate">{member.display_name}</p>
+										{#if isMe}
+											<span class="font-mono text-[9px] text-vault-green">(you)</span>
+										{/if}
+									</div>
+									<p class="font-mono text-[10px] text-vault-text-dim truncate">
+										{member.email}
+									</p>
+								</div>
+							</div>
+							<div class="flex items-center gap-3 ml-3 shrink-0">
+								<span
+									class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider border
+										{member.role === 'editor'
+										? 'text-vault-amber bg-vault-amber-muted border-vault-amber/30'
+										: 'text-vault-blue bg-vault-blue-muted border-vault-blue/30'}"
+								>
+									{member.role}
+								</span>
+								<span class="font-mono text-[10px] text-vault-text-dim">
+									{formatDate(member.created_at)}
+								</span>
+								{#if isEditor && !isMe}
+									<button
+										disabled
+										class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-red/60 bg-vault-surface-raised border border-vault-border cursor-not-allowed opacity-50"
+										title="Coming soon"
+									>
+										Remove
+									</button>
+								{/if}
+							</div>
+						</div>
+					{/each}
 				</div>
 			{/if}
 		</section>

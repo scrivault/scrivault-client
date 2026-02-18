@@ -14,7 +14,7 @@
 	import { ApiError } from '$lib/api';
 	import { getToken } from '$lib/newsroom/auth';
 	import { createWsConnection, newsroomWsUrl } from '$lib/ws';
-	import type { NewsroomMessage, TipStatus } from '$lib/newsroom/types';
+	import type { NewsroomMessage, TipStatus, TeamMember } from '$lib/newsroom/types';
 	import MessageBubble from '../../../components/newsroom/MessageBubble.svelte';
 	import StatusPill from '../../../components/newsroom/StatusPill.svelte';
 
@@ -32,6 +32,7 @@
 	let decryptError = $state('');
 	let tipStatus: TipStatus = $state('new');
 	let assignedTo: string | null = $state(null);
+	let assigneeName: string | null = $state(null);
 	let loading = $state(true);
 	let error = $state('');
 	let updating = $state(false);
@@ -42,8 +43,21 @@
 	let sendingReply = $state(false);
 	let replyError = $state('');
 
+	// Modal state: assign to reporter
+	let showAssignModal = $state(false);
+	let teamMembers: TeamMember[] = $state([]);
+	let loadingTeam = $state(false);
+	let assigningMemberId: string | null = $state(null);
+
+	// Modal state: create investigation
+	let showInvestigationModal = $state(false);
+	let investigationCodename = $state('');
+	let creatingInvestigation = $state(false);
+
 	// Scroll anchor for auto-scrolling to latest message
 	let scrollAnchor: HTMLDivElement | undefined = $state();
+
+	const isAssignedToMe = $derived(assignedTo && user && assignedTo === user.journalist_id);
 
 	function scrollToBottom() {
 		if (!scrollAnchor) return;
@@ -52,16 +66,23 @@
 		});
 	}
 
-	/** Return the sender_role of the previous message, or null if none. */
 	function prevSenderRole(index: number): 'source' | 'journalist' | null {
 		if (index === 0) return null;
 		return messages[index - 1]?.sender_role ?? null;
 	}
 
-	/** Build the label for a message bubble. */
 	function senderLabel(msg: NewsroomMessage): string {
 		if (msg.sender_role === 'source') return 'Source';
 		return user?.display_name ?? 'Journalist';
+	}
+
+	function initials(name: string): string {
+		return name
+			.split(' ')
+			.map((w) => w[0])
+			.join('')
+			.toUpperCase()
+			.slice(0, 2);
 	}
 
 	const statuses: TipStatus[] = ['new', 'review', 'active', 'closed'];
@@ -81,6 +102,7 @@
 				if (tip) {
 					tipStatus = tip.status;
 					assignedTo = tip.assigned_to;
+					assigneeName = tip.assignee_name;
 				}
 			} catch {
 				// Non-critical — status controls just won't have initial data
@@ -104,15 +126,10 @@
 		}
 
 		try {
-			// Fetch the sealed key for this journalist
 			const sealedRes = await newsroomApi.getSealedKey(threadId);
 			const sealed = fromBase64(sealedRes.sealed_key);
-
-			// Unseal with our keypair
 			threadKey = await unsealThreadKey(sealed, publicKey, privateKey);
 			canDecrypt = true;
-
-			// Decrypt all messages
 			await decryptAllMessages();
 		} catch (err) {
 			if (err instanceof ApiError && err.status === 404) {
@@ -139,20 +156,21 @@
 				);
 				newMap.set(msg.id, text);
 			} catch {
-				// Individual message decryption failure — leave as encrypted
 				console.warn(`Failed to decrypt message ${msg.id}`);
 			}
 		}
 		decryptedTexts = newMap;
 	}
 
+	// ── Status change (uses new workflow endpoint) ────────────
+
 	async function handleStatusChange(newStatus: TipStatus) {
 		if (newStatus === tipStatus) return;
 		updating = true;
 		updateError = '';
 		try {
-			await newsroomApi.updateTip(threadId, { status: newStatus });
-			tipStatus = newStatus;
+			const res = await newsroomApi.updateThreadStatus(threadId, newStatus);
+			tipStatus = res.status as TipStatus;
 		} catch (err) {
 			updateError = err instanceof Error ? err.message : 'Failed to update status.';
 		} finally {
@@ -160,17 +178,18 @@
 		}
 	}
 
+	// ── Assignment (uses new workflow endpoints) ──────────────
+
 	async function handleAssignToMe() {
 		if (!user) return;
 		updating = true;
 		updateError = '';
 		try {
-			// If we're an editor with the thread key, self-grant if not already granted
+			// Self-grant key if editor with thread key and no existing grant
 			if (isEditor && threadKey && publicKey) {
 				try {
 					await newsroomApi.getSealedKey(threadId);
 				} catch (err) {
-					// No grant exists — self-grant
 					if (err instanceof ApiError && err.status === 404) {
 						const sealed = await sealThreadKeyForJournalist(threadKey, publicKey);
 						await newsroomApi.grantKey(threadId, {
@@ -181,8 +200,9 @@
 				}
 			}
 
-			await newsroomApi.updateTip(threadId, { assigned_to: user.journalist_id });
+			await newsroomApi.assignThread(threadId, user.journalist_id);
 			assignedTo = user.journalist_id;
+			assigneeName = user.display_name;
 		} catch (err) {
 			updateError = err instanceof Error ? err.message : 'Failed to assign.';
 		} finally {
@@ -190,60 +210,95 @@
 		}
 	}
 
-	async function handleAssignToReporter() {
-		if (!isEditor || !threadKey) return;
-
-		const reporterId = prompt('Enter reporter journalist ID:');
-		if (!reporterId?.trim()) return;
-
+	async function handleUnassign() {
 		updating = true;
 		updateError = '';
 		try {
-			// Fetch reporter's public key
-			const pubkeysRes = await newsroomApi.getReporterPublicKeys();
-			const reporter = pubkeysRes.keys.find((k) => k.journalist_id === reporterId.trim());
-			if (!reporter) {
-				updateError = 'Reporter not found or has no public key.';
-				updating = false;
-				return;
-			}
-
-			// Seal thread key for reporter
-			const reporterPubKey = fromBase64(reporter.public_key);
-			const sealed = await sealThreadKeyForJournalist(threadKey, reporterPubKey);
-
-			// Grant key and assign
-			await newsroomApi.grantKey(threadId, {
-				journalist_id: reporterId.trim(),
-				sealed_key: toBase64(sealed)
-			});
-			await newsroomApi.updateTip(threadId, { assigned_to: reporterId.trim() });
-			assignedTo = reporterId.trim();
+			await newsroomApi.unassignThread(threadId);
+			assignedTo = null;
+			assigneeName = null;
 		} catch (err) {
-			updateError = err instanceof Error ? err.message : 'Failed to assign reporter.';
+			updateError = err instanceof Error ? err.message : 'Failed to unassign.';
 		} finally {
 			updating = false;
 		}
 	}
 
-	async function handlePromoteToInvestigation() {
-		const codename = prompt('Enter investigation codename:');
-		if (!codename?.trim()) return;
-		updating = true;
+	async function openAssignModal() {
+		showAssignModal = true;
+		loadingTeam = true;
+		try {
+			const res = await newsroomApi.getTeamMembers();
+			// Exclude current user from the list
+			teamMembers = (res.members ?? []).filter((m) => m.id !== user?.journalist_id);
+		} catch {
+			teamMembers = [];
+		} finally {
+			loadingTeam = false;
+		}
+	}
+
+	async function handleAssignToMember(member: TeamMember) {
+		if (!threadKey) return;
+		assigningMemberId = member.id;
+		updateError = '';
+		try {
+			// Fetch the member's public key and seal thread key
+			const pubkeysRes = await newsroomApi.getReporterPublicKeys();
+			// Also check editor keys — the member might be an editor
+			const editorKeysRes = await newsroomApi.getEditorPublicKeys();
+			const allKeys = [...pubkeysRes.keys, ...editorKeysRes.keys];
+			const targetKey = allKeys.find((k) => k.journalist_id === member.id);
+
+			if (!targetKey) {
+				updateError = `${member.display_name} has no public key on file.`;
+				assigningMemberId = null;
+				return;
+			}
+
+			const recipientPubKey = fromBase64(targetKey.public_key);
+			const sealed = await sealThreadKeyForJournalist(threadKey, recipientPubKey);
+
+			// Grant key, then assign
+			await newsroomApi.grantKey(threadId, {
+				journalist_id: member.id,
+				sealed_key: toBase64(sealed)
+			});
+			await newsroomApi.assignThread(threadId, member.id);
+			assignedTo = member.id;
+			assigneeName = member.display_name;
+			showAssignModal = false;
+		} catch (err) {
+			updateError = err instanceof Error ? err.message : 'Failed to assign.';
+		} finally {
+			assigningMemberId = null;
+		}
+	}
+
+	// ── Investigation (replaces prompt() with modal) ─────────
+
+	function openInvestigationModal() {
+		investigationCodename = '';
+		showInvestigationModal = true;
+	}
+
+	async function handleCreateInvestigation() {
+		if (!investigationCodename.trim()) return;
+		creatingInvestigation = true;
 		updateError = '';
 		try {
 			const inv = await newsroomApi.createInvestigation({
 				thread_id: threadId,
-				codename: codename.trim()
+				codename: investigationCodename.trim()
 			});
+			showInvestigationModal = false;
 			goto(`/newsroom/investigations/${inv.id}`);
 		} catch (err) {
 			updateError = err instanceof Error ? err.message : 'Failed to create investigation.';
-			updating = false;
+			creatingInvestigation = false;
 		}
 	}
 
-	/** Re-fetch messages and re-decrypt (used by WebSocket callback and after sending). */
 	async function refreshMessages() {
 		try {
 			const res = await newsroomApi.getMessages(threadId);
@@ -369,7 +424,7 @@
 		</div>
 	</div>
 {:else}
-	<!-- Controls bar — compact, secondary styling -->
+	<!-- Controls bar -->
 	<div class="px-6 py-2.5 border-b border-vault-border bg-vault-surface/50 shrink-0">
 		<div class="flex items-center gap-3 flex-wrap">
 			<!-- Status selector -->
@@ -390,20 +445,46 @@
 
 			<div class="w-px h-4 bg-vault-border"></div>
 
-			<!-- Ghost-style action buttons -->
+			<!-- Assignment display + actions -->
+			{#if assignedTo}
+				<div class="flex items-center gap-2">
+					<div class="flex items-center gap-1.5">
+						<div class="w-4 h-4 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center">
+							<span class="font-mono text-[7px] text-vault-text-dim">
+								{initials(assigneeName ?? '??')}
+							</span>
+						</div>
+						<span class="text-[10px] font-mono text-vault-text-muted">
+							{isAssignedToMe ? 'Assigned to you' : `Assigned to ${assigneeName ?? 'Unknown'}`}
+						</span>
+					</div>
+					{#if isEditor}
+						<button
+							onclick={handleUnassign}
+							disabled={updating}
+							class="text-[10px] font-mono text-vault-text-dim hover:text-vault-red transition-colors disabled:opacity-30"
+						>
+							Unassign
+						</button>
+					{/if}
+				</div>
+			{/if}
+
 			{#if !assignedTo || isEditor}
-				<button
-					onclick={handleAssignToMe}
-					disabled={updating}
-					class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
-				>
-					Assign to me
-				</button>
+				{#if !isAssignedToMe}
+					<button
+						onclick={handleAssignToMe}
+						disabled={updating}
+						class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
+					>
+						Assign to me
+					</button>
+				{/if}
 			{/if}
 
 			{#if isEditor && canDecrypt}
 				<button
-					onclick={handleAssignToReporter}
+					onclick={openAssignModal}
 					disabled={updating}
 					class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
 				>
@@ -414,7 +495,7 @@
 			<!-- Promote — stays prominent -->
 			{#if isEditor}
 				<button
-					onclick={handlePromoteToInvestigation}
+					onclick={openInvestigationModal}
 					disabled={updating}
 					class="ml-auto px-2.5 py-1 rounded text-[10px] font-mono text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
 				>
@@ -436,7 +517,7 @@
 		</div>
 	{/if}
 
-	<!-- Messages — scrollable area that fills space between header/toolbar and reply box -->
+	<!-- Messages -->
 	<div class="flex-1 overflow-y-auto px-6 py-6">
 		{#if messages.length === 0}
 			<div class="flex items-center justify-center py-12 text-sm text-vault-text-dim">
@@ -458,7 +539,7 @@
 		<div bind:this={scrollAnchor}></div>
 	</div>
 
-	<!-- Reply area — anchored to bottom -->
+	<!-- Reply area -->
 	<div class="shrink-0 px-6 py-3 border-t border-vault-border bg-vault-surface/80 backdrop-blur-sm">
 		{#if canDecrypt}
 			<form
@@ -511,5 +592,130 @@
 				</span>
 			</div>
 		{/if}
+	</div>
+{/if}
+
+<!-- Assign to Reporter modal -->
+{#if showAssignModal}
+	<!-- svelte-ignore a11y_interactive_supports_focus -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+		onclick={(e) => { if (e.target === e.currentTarget) showAssignModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showAssignModal = false; }}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Assign to reporter"
+	>
+		<div class="w-full max-w-sm mx-4 rounded-lg bg-vault-surface border border-vault-border shadow-2xl">
+			<div class="px-4 py-3 border-b border-vault-border">
+				<h3 class="font-mono text-xs text-vault-text">Assign to team member</h3>
+			</div>
+			<div class="max-h-64 overflow-y-auto">
+				{#if loadingTeam}
+					<div class="flex items-center justify-center py-8">
+						<svg class="w-4 h-4 animate-spin text-vault-text-dim" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+					</div>
+				{:else if teamMembers.length === 0}
+					<div class="px-4 py-6 text-center">
+						<p class="text-sm text-vault-text-dim">No other team members found.</p>
+					</div>
+				{:else}
+					{#each teamMembers as member (member.id)}
+						<button
+							onclick={() => handleAssignToMember(member)}
+							disabled={assigningMemberId !== null}
+							class="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-vault-surface-raised disabled:opacity-50 border-b border-vault-border last:border-b-0"
+						>
+							<div class="w-7 h-7 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center shrink-0">
+								<span class="font-mono text-[9px] text-vault-text-dim">
+									{initials(member.display_name)}
+								</span>
+							</div>
+							<div class="min-w-0 flex-1">
+								<p class="text-sm text-vault-text truncate">{member.display_name}</p>
+								<p class="font-mono text-[10px] text-vault-text-dim uppercase">{member.role}</p>
+							</div>
+							{#if assigningMemberId === member.id}
+								<svg class="w-4 h-4 animate-spin text-vault-green shrink-0" fill="none" viewBox="0 0 24 24">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								</svg>
+							{/if}
+						</button>
+					{/each}
+				{/if}
+			</div>
+			<div class="px-4 py-3 border-t border-vault-border">
+				<button
+					onclick={() => { showAssignModal = false; }}
+					class="w-full px-3 py-2 rounded text-[11px] font-mono text-vault-text-muted hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors"
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- Create Investigation modal -->
+{#if showInvestigationModal}
+	<!-- svelte-ignore a11y_interactive_supports_focus -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+		onclick={(e) => { if (e.target === e.currentTarget) showInvestigationModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showInvestigationModal = false; }}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Create investigation"
+	>
+		<div class="w-full max-w-sm mx-4 rounded-lg bg-vault-surface border border-vault-border shadow-2xl">
+			<div class="px-4 py-3 border-b border-vault-border">
+				<h3 class="font-mono text-xs text-vault-text">Create Investigation</h3>
+			</div>
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					handleCreateInvestigation();
+				}}
+				class="p-4 space-y-4"
+			>
+				<div>
+					<label
+						for="investigation-codename"
+						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					>
+						Codename
+					</label>
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						id="investigation-codename"
+						type="text"
+						bind:value={investigationCodename}
+						autofocus
+						placeholder="e.g. NIGHTFALL"
+						class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 font-mono text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
+					/>
+				</div>
+				<div class="flex gap-2">
+					<button
+						type="button"
+						onclick={() => { showInvestigationModal = false; }}
+						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
+					>
+						Cancel
+					</button>
+					<button
+						type="submit"
+						disabled={!investigationCodename.trim() || creatingInvestigation}
+						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+					>
+						{creatingInvestigation ? 'Creating…' : 'Create'}
+					</button>
+				</div>
+			</form>
+		</div>
 	</div>
 {/if}
