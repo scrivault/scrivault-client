@@ -49,8 +49,22 @@
 		goto(`/newsroom/tips/${tip.id}`);
 	}
 
+	// Load on mount + poll every 30 seconds for new tips
 	$effect(() => {
 		loadTips();
+
+		const interval = setInterval(() => {
+			// Silent background refresh — don't show loading spinner
+			newsroomApi.getTips().then((res) => {
+				tips = res.tips ?? [];
+			}).catch(() => {
+				// Silent failure — will retry next interval
+			});
+		}, 30_000);
+
+		return () => {
+			clearInterval(interval);
+		};
 	});
 </script>
 

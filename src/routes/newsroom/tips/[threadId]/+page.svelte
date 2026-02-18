@@ -12,6 +12,8 @@
 		toBase64
 	} from '$lib/crypto';
 	import { ApiError } from '$lib/api';
+	import { getToken } from '$lib/newsroom/auth';
+	import { createWsConnection, newsroomWsUrl } from '$lib/ws';
 	import type { NewsroomMessage, TipStatus } from '$lib/newsroom/types';
 	import MessageBubble from '../../../components/newsroom/MessageBubble.svelte';
 	import StatusPill from '../../../components/newsroom/StatusPill.svelte';
@@ -218,6 +220,17 @@
 		}
 	}
 
+	/** Re-fetch messages and re-decrypt (used by WebSocket callback and after sending). */
+	async function refreshMessages() {
+		try {
+			const res = await newsroomApi.getMessages(threadId);
+			messages = res.messages ?? [];
+			await decryptAllMessages();
+		} catch {
+			// Non-critical — will retry on next notification
+		}
+	}
+
 	async function handleSendReply() {
 		if (!replyText.trim() || !threadKey) return;
 
@@ -231,11 +244,7 @@
 			});
 
 			replyText = '';
-
-			// Reload thread to show new message
-			const res = await newsroomApi.getMessages(threadId);
-			messages = res.messages ?? [];
-			await decryptAllMessages();
+			await refreshMessages();
 		} catch (err) {
 			replyError = err instanceof Error ? err.message : 'Failed to send reply.';
 		} finally {
@@ -243,8 +252,29 @@
 		}
 	}
 
+	// Load thread on mount
 	$effect(() => {
 		if (threadId) loadThread();
+	});
+
+	// WebSocket for real-time message notifications
+	$effect(() => {
+		if (!threadId) return;
+		const token = getToken();
+		if (!token) return;
+
+		const destroyWs = createWsConnection({
+			url: newsroomWsUrl(threadId, token),
+			onMessage(notification) {
+				if (notification.type === 'new_message') {
+					refreshMessages();
+				}
+			}
+		});
+
+		return () => {
+			destroyWs();
+		};
 	});
 </script>
 

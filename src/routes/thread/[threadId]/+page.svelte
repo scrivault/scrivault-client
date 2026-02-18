@@ -12,6 +12,7 @@
 		ensureReady
 	} from '$lib/crypto';
 	import { threadId, threadKey, threadSalt } from '$lib/stores';
+	import { createWsConnection, sourceWsUrl } from '$lib/ws';
 
 	// ── State ────────────────────────────────────────────────────
 
@@ -304,11 +305,26 @@
 		document.body.removeChild(a);
 	}
 
-	// Load on mount
+	// Load on mount + connect WebSocket for real-time updates
 	$effect(() => {
-		if (currentThreadId) {
-			loadMessages();
-		}
+		if (!currentThreadId) return;
+
+		loadMessages();
+
+		// Connect WebSocket for live notifications.
+		// The source endpoint uses the blindedId (which is the threadId for sources).
+		const destroyWs = createWsConnection({
+			url: sourceWsUrl(currentThreadId),
+			onMessage(notification) {
+				if (notification.type === 'new_message') {
+					loadMessages();
+				}
+			}
+		});
+
+		return () => {
+			destroyWs();
+		};
 	});
 
 	// Cleanup blob URLs on destroy

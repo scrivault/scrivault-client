@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { newsroomApi } from '$lib/newsroom/api';
-	import { setAuth } from '$lib/newsroom/auth';
+	import { setAuth, persistSession } from '$lib/newsroom/auth';
 	import {
 		decryptPrivateKeyWithPassword,
 		derivePublicKey,
-		fromBase64
+		fromBase64,
+		toBase64
 	} from '$lib/crypto';
 
 	let email = $state('');
@@ -46,18 +47,41 @@
 				}
 			}
 
-			setAuth(
-				res.token,
-				{
+			const userObj = {
 					journalist_id: res.journalist_id,
 					email: email.trim(),
 					display_name: email.trim(),
 					role: res.role
-				},
+				};
+
+			setAuth(
+				res.token,
+				userObj,
 				res.expires_at,
 				privateKey,
 				publicKey
 			);
+
+			// Persist session so page refresh doesn't require re-login.
+			persistSession(
+				res.token,
+				userObj,
+				new Date(res.expires_at).getTime(),
+				res.encrypted_private_key ?? null,
+				res.private_key_nonce ?? null,
+				res.key_salt ?? null,
+			);
+
+			// Store the raw private key in sessionStorage so it survives refresh.
+			// sessionStorage is tab-scoped and cleared when the tab closes,
+			// providing a reasonable security tradeoff for session continuity.
+			if (privateKey) {
+				try {
+					sessionStorage.setItem('scrivault_newsroom_privkey', toBase64(privateKey));
+				} catch {
+					// sessionStorage unavailable — key won't survive refresh
+				}
+			}
 
 			goto('/newsroom/tips');
 		} catch (err) {
