@@ -3,22 +3,41 @@
 
 	let {
 		message,
-		decryptedText = undefined
+		decryptedText = undefined,
+		senderLabel = undefined
 	}: {
 		message: NewsroomMessage;
 		decryptedText?: string | undefined;
+		senderLabel?: string | undefined;
 	} = $props();
 
 	const isSource = $derived(message.sender_role === 'source');
 	const isDecrypted = $derived(decryptedText !== undefined);
 
-	function formatTime(iso: string): string {
+	const label = $derived(senderLabel ?? (isSource ? 'Source' : 'Journalist'));
+
+	function relativeTime(iso: string): string {
 		const date = new Date(iso);
-		return (
-			date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
-			', ' +
-			date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-		);
+		const now = Date.now();
+		const diff = now - date.getTime();
+
+		const seconds = Math.floor(diff / 1000);
+		if (seconds < 60) return 'Just now';
+
+		const minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return `${minutes}m ago`;
+
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h ago`;
+
+		const days = Math.floor(hours / 24);
+		if (days === 1) {
+			return 'Yesterday, ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+		}
+		if (days < 7) return `${days}d ago`;
+
+		return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+			', ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 	}
 
 	function truncateCiphertext(ct: string): string {
@@ -29,40 +48,27 @@
 
 <div class="flex {isSource ? 'justify-start' : 'justify-end'}">
 	<div
-		class="max-w-[80%] rounded-lg px-4 py-3
+		class="max-w-[80%] rounded-lg px-4 py-2.5
 			{isSource
 			? 'bg-vault-surface border border-vault-border'
 			: 'bg-vault-green-muted border border-vault-green/20'}"
 	>
 		<!-- Header -->
-		<div class="flex items-center gap-2 mb-1.5">
+		<div class="flex items-center gap-2 mb-1">
 			<span
 				class="font-mono text-[10px] uppercase tracking-wider
 					{isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}"
 			>
-				{isSource ? 'Source' : 'Journalist'}
-			</span>
-			<span class="font-mono text-[10px] text-vault-text-dim">
-				#{message.ordinal}
+				{label}
 			</span>
 			<span class="text-[10px] text-vault-text-dim">
-				{formatTime(message.created_at)}
+				{relativeTime(message.created_at)}
 			</span>
 		</div>
 
 		{#if isDecrypted}
-			<!-- Decrypted plaintext content -->
-			<div class="text-sm text-vault-text whitespace-pre-wrap leading-relaxed">
-				{decryptedText}
-			</div>
-			<div class="mt-1.5 flex items-center gap-1.5">
-				<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
-				<span class="font-mono text-[9px] text-vault-green/70 uppercase tracking-wider">
-					Decrypted
-				</span>
-			</div>
+			<p class="text-sm text-vault-text whitespace-pre-wrap break-words">{decryptedText}</p>
 		{:else}
-			<!-- Encrypted content (no key) -->
 			<div class="font-mono text-[11px] text-vault-text-muted break-all leading-relaxed">
 				{truncateCiphertext(message.ciphertext)}
 			</div>

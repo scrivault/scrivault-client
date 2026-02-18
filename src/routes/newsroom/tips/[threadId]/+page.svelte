@@ -42,6 +42,28 @@
 	let sendingReply = $state(false);
 	let replyError = $state('');
 
+	// Scroll anchor for auto-scrolling to latest message
+	let scrollAnchor: HTMLDivElement | undefined = $state();
+
+	function scrollToBottom() {
+		if (!scrollAnchor) return;
+		requestAnimationFrame(() => {
+			scrollAnchor?.scrollIntoView({ behavior: 'smooth' });
+		});
+	}
+
+	/** Return the sender_role of the previous message, or null if none. */
+	function prevSenderRole(index: number): 'source' | 'journalist' | null {
+		if (index === 0) return null;
+		return messages[index - 1]?.sender_role ?? null;
+	}
+
+	/** Build the label for a message bubble. */
+	function senderLabel(msg: NewsroomMessage): string {
+		if (msg.sender_role === 'source') return 'Source';
+		return user?.display_name ?? 'Journalist';
+	}
+
 	const statuses: TipStatus[] = ['new', 'review', 'active', 'closed'];
 
 	async function loadThread() {
@@ -70,6 +92,7 @@
 			error = err instanceof Error ? err.message : 'Failed to load thread.';
 		} finally {
 			loading = false;
+			scrollToBottom();
 		}
 	}
 
@@ -226,6 +249,7 @@
 			const res = await newsroomApi.getMessages(threadId);
 			messages = res.messages ?? [];
 			await decryptAllMessages();
+			scrollToBottom();
 		} catch {
 			// Non-critical — will retry on next notification
 		}
@@ -430,16 +454,24 @@
 		{/if}
 
 		<!-- Messages -->
-		<div class="px-6 py-6 space-y-4">
+		<div class="px-6 py-6">
 			{#if messages.length === 0}
 				<div class="flex items-center justify-center py-12 text-sm text-vault-text-dim">
 					No messages in this thread.
 				</div>
 			{:else}
-				{#each messages as msg (msg.id)}
-					<MessageBubble message={msg} decryptedText={decryptedTexts.get(msg.id)} />
+				{#each messages as msg, i (msg.id)}
+					{@const sameSender = i > 0 && prevSenderRole(i) === msg.sender_role}
+					<div class="{i === 0 ? '' : sameSender ? 'mt-1' : 'mt-4'}">
+						<MessageBubble
+							message={msg}
+							decryptedText={decryptedTexts.get(msg.id)}
+							senderLabel={senderLabel(msg)}
+						/>
+					</div>
 				{/each}
 			{/if}
+			<div bind:this={scrollAnchor}></div>
 		</div>
 
 		<!-- Reply area -->

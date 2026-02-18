@@ -51,6 +51,8 @@
 	let error = $state('');
 	let loadError = $state('');
 
+	let scrollAnchor: HTMLDivElement | undefined = $state();
+
 	const currentThreadId = $derived($page.params.threadId ?? '');
 	const shortHash = $derived(currentThreadId.slice(0, 12));
 
@@ -85,6 +87,45 @@
 		if (bytes < 1024) return `${bytes} B`;
 		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	}
+
+	function relativeTime(iso: string): string {
+		const date = new Date(iso);
+		const now = Date.now();
+		const diff = now - date.getTime();
+
+		const seconds = Math.floor(diff / 1000);
+		if (seconds < 60) return 'Just now';
+
+		const minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return `${minutes}m ago`;
+
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h ago`;
+
+		const days = Math.floor(hours / 24);
+		if (days === 1) {
+			return 'Yesterday, ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+		}
+		if (days < 7) return `${days}d ago`;
+
+		return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) +
+			', ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+	}
+
+	function scrollToBottom() {
+		// Use requestAnimationFrame to ensure DOM has updated
+		requestAnimationFrame(() => {
+			scrollAnchor?.scrollIntoView({ behavior: 'smooth' });
+		});
+	}
+
+	/** Get the sender role of the previous timeline item (for spacing logic). */
+	function prevSenderRole(index: number): string | null {
+		if (index === 0) return null;
+		const prev = timeline[index - 1];
+		if (prev.kind === 'message') return prev.data.senderRole;
+		return null; // documents break sender grouping
 	}
 
 	// ── Load & decrypt messages + documents ──────────────────────
@@ -179,9 +220,9 @@
 						};
 						docs.push(doc);
 
-						// Auto-decrypt images inline
+						// Auto-decrypt images inline — await to avoid race condition
 						if (isImage) {
-							decryptAndDisplayDoc(doc, docData.ciphertext, docData.nonce, key);
+							await decryptAndDisplayDoc(doc, docData.ciphertext, docData.nonce, key);
 						}
 					} catch {
 						// Skip documents that fail to fetch
@@ -225,6 +266,7 @@
 			}
 
 			timeline = items;
+			scrollToBottom();
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load messages.';
 		} finally {
@@ -247,14 +289,9 @@
 			const blob = new Blob([plainBytes], { type: doc.mimeType });
 			doc.blobUrl = URL.createObjectURL(blob);
 			doc.loading = false;
-			// Trigger reactivity on both arrays
-			documents = [...documents];
-			timeline = [...timeline];
 		} catch {
 			doc.error = 'Failed to decrypt';
 			doc.loading = false;
-			documents = [...documents];
-			timeline = [...timeline];
 		}
 	}
 
@@ -391,17 +428,6 @@
 		const input = e.target as HTMLInputElement;
 		files = input.files;
 	}
-
-	function formatTime(iso: string): string {
-		const date = new Date(iso);
-		return date.toLocaleDateString(undefined, {
-			month: 'short',
-			day: 'numeric'
-		}) + ', ' + date.toLocaleTimeString(undefined, {
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	}
 </script>
 
 <svelte:head>
@@ -433,7 +459,7 @@
 	</header>
 
 	<!-- Messages area -->
-	<div class="flex-1 py-6 space-y-4">
+	<div class="flex-1 py-6">
 		{#if loading}
 			<div class="flex items-center justify-center py-20">
 				<div class="flex items-center gap-3 text-vault-text-muted">
@@ -462,95 +488,103 @@
 			</div>
 		{:else}
 			<!-- Unified timeline: messages and documents in chronological order -->
-			{#each timeline as item (item.data.id)}
-				{#if item.kind === 'message'}
-					{@const msg = item.data}
-					{@const isSource = msg.senderRole === 'source'}
-					<div class="flex {isSource ? 'justify-start' : 'justify-end'}">
-						<div class="max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-4 py-3">
-							<!-- Sender label -->
-							<div class="flex items-center gap-2 mb-1.5">
-								<span class="font-mono text-[10px] uppercase tracking-wider {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
-									{isSource ? 'You' : 'Journalist'}
-								</span>
-								<span class="text-[10px] text-vault-text-dim">
-									{formatTime(msg.createdAt)}
-								</span>
-							</div>
-							<!-- Message body -->
-							<p class="text-sm text-vault-text whitespace-pre-wrap break-words">{msg.text}</p>
-						</div>
-					</div>
-				{:else}
-					{@const doc = item.data}
-					<div class="rounded-lg bg-vault-surface border border-vault-border overflow-hidden">
-						<!-- Image preview -->
-						{#if doc.isImage && doc.blobUrl}
-							<div class="p-2 bg-vault-bg">
-								<img
-									src={doc.blobUrl}
-									alt={doc.fileName}
-									class="max-w-full max-h-80 rounded object-contain mx-auto"
-								/>
-							</div>
-						{:else if doc.isImage && doc.loading}
-							<div class="p-8 bg-vault-bg flex items-center justify-center">
-								<div class="flex items-center gap-2 text-vault-text-muted">
-									<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-									</svg>
-									<span class="text-xs">Decrypting image…</span>
-								</div>
-							</div>
-						{:else if doc.isImage && doc.error}
-							<div class="p-8 bg-vault-bg flex items-center justify-center">
-								<span class="text-xs text-vault-red">{doc.error}</span>
-							</div>
-						{/if}
-
-						<!-- File info bar -->
-						<div class="flex items-center justify-between px-3 py-2.5">
-							<div class="flex items-center gap-2 min-w-0">
-								<!-- File icon -->
-								{#if doc.isImage}
-									<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-									</svg>
-								{:else}
-									<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-									</svg>
+			{#each timeline as item, i (item.data.id)}
+				{@const sameSender = item.kind === 'message' && prevSenderRole(i) === item.data.senderRole}
+				<div class="{i === 0 ? '' : sameSender ? 'mt-1' : 'mt-4'}">
+					{#if item.kind === 'message'}
+						{@const msg = item.data}
+						{@const isSource = msg.senderRole === 'source'}
+						<div class="flex {isSource ? 'justify-start' : 'justify-end'}">
+							<div class="max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-4 py-2.5">
+								{#if !sameSender}
+									<div class="flex items-center gap-2 mb-1">
+										<span class="font-mono text-[10px] uppercase tracking-wider {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
+											{isSource ? 'You' : 'Reporter'}
+										</span>
+										<span class="text-[10px] text-vault-text-dim">
+											{relativeTime(msg.createdAt)}
+										</span>
+									</div>
 								{/if}
-								<div class="min-w-0">
-									<p class="text-sm text-vault-text font-mono truncate">{doc.fileName}</p>
-									<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
-								</div>
-							</div>
-
-							<!-- Download button -->
-							<button
-								onclick={() => handleDownload(doc)}
-								disabled={doc.loading}
-								class="shrink-0 ml-3 p-1.5 rounded text-vault-text-muted hover:text-vault-text hover:bg-vault-bg transition-colors disabled:opacity-30"
-								title="Download file"
-							>
-								{#if doc.loading}
-									<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-									</svg>
-								{:else}
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-									</svg>
+								<p class="text-sm text-vault-text whitespace-pre-wrap break-words">{msg.text}</p>
+								{#if sameSender}
+									<div class="mt-0.5 text-[10px] text-vault-text-dim">
+										{relativeTime(msg.createdAt)}
+									</div>
 								{/if}
-							</button>
+							</div>
 						</div>
-					</div>
-				{/if}
+					{:else}
+						{@const doc = item.data}
+						<div class="rounded-lg bg-vault-surface border border-vault-border overflow-hidden">
+							<!-- Image preview -->
+							{#if doc.isImage && doc.blobUrl}
+								<div class="p-2 bg-vault-bg">
+									<img
+										src={doc.blobUrl}
+										alt={doc.fileName}
+										class="max-w-full max-h-80 rounded object-contain mx-auto"
+									/>
+								</div>
+							{:else if doc.isImage && doc.loading}
+								<div class="p-8 bg-vault-bg flex items-center justify-center">
+									<div class="flex items-center gap-2 text-vault-text-muted">
+										<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+											<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+										</svg>
+										<span class="text-xs">Decrypting image…</span>
+									</div>
+								</div>
+							{:else if doc.isImage && doc.error}
+								<div class="p-8 bg-vault-bg flex items-center justify-center">
+									<span class="text-xs text-vault-red">{doc.error}</span>
+								</div>
+							{/if}
+
+							<!-- File info bar -->
+							<div class="flex items-center justify-between px-3 py-2.5">
+								<div class="flex items-center gap-2 min-w-0">
+									{#if doc.isImage}
+										<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+										</svg>
+									{:else}
+										<svg class="w-4 h-4 text-vault-text-dim shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+										</svg>
+									{/if}
+									<div class="min-w-0">
+										<p class="text-sm text-vault-text font-mono truncate">{doc.fileName}</p>
+										<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
+									</div>
+								</div>
+
+								<!-- Download button -->
+								<button
+									onclick={() => handleDownload(doc)}
+									disabled={doc.loading}
+									class="shrink-0 ml-3 p-1.5 rounded text-vault-text-muted hover:text-vault-text hover:bg-vault-bg transition-colors disabled:opacity-30"
+									title="Download file"
+								>
+									{#if doc.loading}
+										<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+											<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+										</svg>
+									{:else}
+										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+										</svg>
+									{/if}
+								</button>
+							</div>
+						</div>
+					{/if}
+				</div>
 			{/each}
 		{/if}
+		<div bind:this={scrollAnchor}></div>
 	</div>
 
 	<!-- Reply area -->
