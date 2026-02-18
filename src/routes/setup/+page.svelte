@@ -188,17 +188,31 @@
 					for="org-slug"
 					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
 				>
-					URL Slug
+					Your Tip Page URL
 				</label>
-				<input
-					id="org-slug"
-					type="text"
-					bind:value={orgSlug}
-					oninput={handleSlugInput}
-					required
-					class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text font-mono placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-					placeholder="pacific-ledger"
-				/>
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="flex items-center bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 focus-within:border-vault-green focus-within:ring-1 focus-within:ring-vault-green/50 transition-colors cursor-text"
+					onclick={() => document.getElementById('org-slug')?.focus()}
+				>
+					<span class="text-sm font-mono text-vault-text-dim select-none whitespace-nowrap"
+						>https://</span
+					>
+					<input
+						id="org-slug"
+						type="text"
+						bind:value={orgSlug}
+						oninput={handleSlugInput}
+						required
+						style="width: {Math.max(orgSlug.length, 1)}ch"
+						class="bg-transparent border-none outline-none text-sm font-mono text-vault-green placeholder:text-vault-text-dim min-w-[3ch] p-0"
+						placeholder="xxx"
+					/>
+					<span class="text-sm font-mono text-vault-text-dim select-none whitespace-nowrap"
+						>.scrivault.org</span
+					>
+				</div>
 			</div>
 
 			<!-- Admin account section -->
