@@ -308,7 +308,7 @@
 
 <!-- Header -->
 <div
-	class="flex items-center justify-between px-6 py-4 border-b border-vault-border bg-vault-surface"
+	class="flex items-center justify-between px-6 py-3 border-b border-vault-border bg-vault-surface shrink-0"
 >
 	<div class="flex items-center gap-3">
 		<a
@@ -332,197 +332,184 @@
 	</div>
 	<div class="flex items-center gap-2">
 		{#if canDecrypt}
-			<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-vault-green-muted border border-vault-green/20">
+			<div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-vault-green/30 bg-vault-green-muted">
 				<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
-				<span class="font-mono text-[9px] text-vault-green uppercase tracking-wider">Decrypted</span>
+				<span class="font-mono text-[10px] text-vault-green">ENCRYPTED</span>
 			</div>
 		{:else if !loading && !error}
-			<div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-vault-amber/10 border border-vault-amber/20">
+			<div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-vault-amber/20 bg-vault-amber/10">
 				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
-				<span class="font-mono text-[9px] text-vault-amber uppercase tracking-wider">Encrypted</span>
+				<span class="font-mono text-[10px] text-vault-amber">ENCRYPTED</span>
 			</div>
 		{/if}
 		<StatusPill status={tipStatus} />
 	</div>
 </div>
 
-<!-- Content -->
-<div class="flex-1 overflow-y-auto">
-	{#if loading}
-		<div class="flex items-center justify-center py-20">
-			<div class="flex items-center gap-3 text-vault-text-muted">
-				<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-					<circle
-						class="opacity-25"
-						cx="12"
-						cy="12"
-						r="10"
-						stroke="currentColor"
-						stroke-width="4"
-					></circle>
-					<path
-						class="opacity-75"
-						fill="currentColor"
-						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-					></path>
-				</svg>
-				<span class="text-sm">Loading thread…</span>
-			</div>
+{#if loading}
+	<div class="flex-1 flex items-center justify-center">
+		<div class="flex items-center gap-3 text-vault-text-muted">
+			<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+			</svg>
+			<span class="text-sm">Loading thread…</span>
 		</div>
-	{:else if error}
-		<div class="flex items-center justify-center py-20">
-			<div class="text-center">
-				<p class="text-sm text-vault-red mb-4">{error}</p>
-				<button
-					onclick={loadThread}
-					class="text-sm text-vault-text-muted hover:text-vault-text underline underline-offset-2"
-				>
-					Try again
-				</button>
-			</div>
+	</div>
+{:else if error}
+	<div class="flex-1 flex items-center justify-center">
+		<div class="text-center">
+			<p class="text-sm text-vault-red mb-4">{error}</p>
+			<button
+				onclick={loadThread}
+				class="text-sm text-vault-text-muted hover:text-vault-text underline underline-offset-2"
+			>
+				Try again
+			</button>
 		</div>
-	{:else}
-		<!-- Controls bar -->
-		<div class="px-6 py-4 border-b border-vault-border bg-vault-surface/50">
-			<div class="flex items-center gap-4 flex-wrap">
-				<!-- Status selector -->
-				<div class="flex items-center gap-2">
-					<span class="font-mono text-[9px] tracking-wider uppercase text-vault-text-dim">
-						Status
-					</span>
-					<div class="flex gap-1">
-						{#each statuses as s}
-							<button
-								onclick={() => handleStatusChange(s)}
-								disabled={updating}
-								class="px-2 py-1 rounded text-[11px] font-mono transition-colors
-									{tipStatus === s
-									? 'bg-vault-surface-raised text-vault-text border border-vault-border'
-									: 'text-vault-text-dim hover:text-vault-text-muted'}"
-							>
-								{s}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Assign to me -->
-				{#if !assignedTo || isEditor}
+	</div>
+{:else}
+	<!-- Controls bar — compact, secondary styling -->
+	<div class="px-6 py-2.5 border-b border-vault-border bg-vault-surface/50 shrink-0">
+		<div class="flex items-center gap-3 flex-wrap">
+			<!-- Status selector -->
+			<div class="flex items-center gap-1.5">
+				{#each statuses as s}
 					<button
-						onclick={handleAssignToMe}
+						onclick={() => handleStatusChange(s)}
 						disabled={updating}
-						class="px-3 py-1 rounded text-[11px] font-mono text-vault-text-muted hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors disabled:opacity-30"
+						class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors
+							{tipStatus === s
+							? 'bg-vault-surface-raised text-vault-text border border-vault-border'
+							: 'text-vault-text-dim hover:text-vault-text-muted'}"
 					>
-						Assign to me
+						{s}
 					</button>
-				{/if}
-
-				<!-- Assign to reporter (editors with thread key only) -->
-				{#if isEditor && canDecrypt}
-					<button
-						onclick={handleAssignToReporter}
-						disabled={updating}
-						class="px-3 py-1 rounded text-[11px] font-mono text-vault-text-muted hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors disabled:opacity-30"
-					>
-						Assign to reporter
-					</button>
-				{/if}
-
-				<!-- Promote to investigation (editors only) -->
-				{#if isEditor}
-					<button
-						onclick={handlePromoteToInvestigation}
-						disabled={updating}
-						class="px-3 py-1 rounded text-[11px] font-mono text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
-					>
-						Create Investigation
-					</button>
-				{/if}
-			</div>
-
-			{#if updateError}
-				<p class="text-[11px] text-vault-red mt-2">{updateError}</p>
-			{/if}
-		</div>
-
-		<!-- Decryption status notice -->
-		{#if decryptError}
-			<div class="mx-6 mt-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-vault-amber/10 border border-vault-amber/20">
-				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60 shrink-0"></div>
-				<span class="font-mono text-[11px] text-vault-amber">{decryptError}</span>
-			</div>
-		{/if}
-
-		<!-- Messages -->
-		<div class="px-6 py-6">
-			{#if messages.length === 0}
-				<div class="flex items-center justify-center py-12 text-sm text-vault-text-dim">
-					No messages in this thread.
-				</div>
-			{:else}
-				{#each messages as msg, i (msg.id)}
-					{@const sameSender = i > 0 && prevSenderRole(i) === msg.sender_role}
-					<div class="{i === 0 ? '' : sameSender ? 'mt-1' : 'mt-4'}">
-						<MessageBubble
-							message={msg}
-							decryptedText={decryptedTexts.get(msg.id)}
-							senderLabel={senderLabel(msg)}
-						/>
-					</div>
 				{/each}
+			</div>
+
+			<div class="w-px h-4 bg-vault-border"></div>
+
+			<!-- Ghost-style action buttons -->
+			{#if !assignedTo || isEditor}
+				<button
+					onclick={handleAssignToMe}
+					disabled={updating}
+					class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
+				>
+					Assign to me
+				</button>
 			{/if}
-			<div bind:this={scrollAnchor}></div>
+
+			{#if isEditor && canDecrypt}
+				<button
+					onclick={handleAssignToReporter}
+					disabled={updating}
+					class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
+				>
+					Assign to reporter
+				</button>
+			{/if}
+
+			<!-- Promote — stays prominent -->
+			{#if isEditor}
+				<button
+					onclick={handlePromoteToInvestigation}
+					disabled={updating}
+					class="ml-auto px-2.5 py-1 rounded text-[10px] font-mono text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
+				>
+					Create Investigation
+				</button>
+			{/if}
 		</div>
 
-		<!-- Reply area -->
-		<div class="px-6 py-4 border-t border-vault-border bg-vault-surface/50">
-			{#if canDecrypt}
-				<!-- Reply form -->
-				<form
-					onsubmit={(e) => {
-						e.preventDefault();
-						handleSendReply();
-					}}
-					class="space-y-3"
-				>
-					<textarea
-						bind:value={replyText}
-						rows={3}
-						placeholder="Type your reply… (encrypted with thread key)"
-						disabled={sendingReply}
-						class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors resize-y min-h-20 disabled:opacity-50"
-					></textarea>
+		{#if updateError}
+			<p class="text-[10px] text-vault-red mt-1.5">{updateError}</p>
+		{/if}
+	</div>
 
-					{#if replyError}
-						<p class="text-[11px] text-vault-red">{replyError}</p>
-					{/if}
-
-					<div class="flex items-center justify-between">
-						<div class="flex items-center gap-1.5">
-							<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
-							<span class="font-mono text-[9px] text-vault-green/70 uppercase tracking-wider">
-								End-to-end encrypted
-							</span>
-						</div>
-						<button
-							type="submit"
-							disabled={!replyText.trim() || sendingReply}
-							class="px-4 py-1.5 rounded-lg bg-vault-green hover:bg-vault-green-dim text-black text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-						>
-							{sendingReply ? 'Sending…' : 'Send Reply'}
-						</button>
-					</div>
-				</form>
-			{:else}
-				<div
-					class="flex items-center gap-2 px-3 py-3 rounded-lg bg-vault-surface border border-vault-border"
-				>
-					<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
-					<span class="font-mono text-[11px] text-vault-text-dim">
-						{decryptError || 'No decryption key available — replies disabled'}
-					</span>
-				</div>
-			{/if}
+	<!-- Decryption status notice -->
+	{#if decryptError}
+		<div class="mx-6 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-vault-amber/10 border border-vault-amber/20 shrink-0">
+			<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60 shrink-0"></div>
+			<span class="font-mono text-[11px] text-vault-amber">{decryptError}</span>
 		</div>
 	{/if}
-</div>
+
+	<!-- Messages — scrollable area that fills space between header/toolbar and reply box -->
+	<div class="flex-1 overflow-y-auto px-6 py-6">
+		{#if messages.length === 0}
+			<div class="flex items-center justify-center py-12 text-sm text-vault-text-dim">
+				No messages in this thread.
+			</div>
+		{:else}
+			{#each messages as msg, i (msg.id)}
+				{@const sameSender = i > 0 && prevSenderRole(i) === msg.sender_role}
+				<div class="{i === 0 ? '' : sameSender ? 'mt-1' : 'mt-4'}">
+					<MessageBubble
+						message={msg}
+						decryptedText={decryptedTexts.get(msg.id)}
+						senderLabel={senderLabel(msg)}
+						{sameSender}
+					/>
+				</div>
+			{/each}
+		{/if}
+		<div bind:this={scrollAnchor}></div>
+	</div>
+
+	<!-- Reply area — anchored to bottom -->
+	<div class="shrink-0 px-6 py-3 border-t border-vault-border bg-vault-surface/80 backdrop-blur-sm">
+		{#if canDecrypt}
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					handleSendReply();
+				}}
+				class="flex items-end gap-2"
+			>
+				<textarea
+					bind:value={replyText}
+					rows={1}
+					placeholder="Type your reply…"
+					disabled={sendingReply}
+					class="flex-1 bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors resize-none max-h-32 disabled:opacity-50"
+					onkeydown={(e) => {
+						if (e.key === 'Enter' && !e.shiftKey) {
+							e.preventDefault();
+							handleSendReply();
+						}
+					}}
+				></textarea>
+
+				<button
+					type="submit"
+					disabled={!replyText.trim() || sendingReply}
+					class="shrink-0 p-2.5 rounded-lg bg-vault-green hover:bg-vault-green-dim text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+				>
+					{#if sendingReply}
+						<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+					{:else}
+						<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+						</svg>
+					{/if}
+				</button>
+			</form>
+
+			{#if replyError}
+				<p class="text-[10px] text-vault-red mt-1.5">{replyError}</p>
+			{/if}
+		{:else}
+			<div class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-vault-surface border border-vault-border">
+				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
+				<span class="font-mono text-[11px] text-vault-text-dim">
+					{decryptError || 'No decryption key available — replies disabled'}
+				</span>
+			</div>
+		{/if}
+	</div>
+{/if}

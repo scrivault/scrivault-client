@@ -4,11 +4,13 @@
 	let {
 		message,
 		decryptedText = undefined,
-		senderLabel = undefined
+		senderLabel = undefined,
+		sameSender = false
 	}: {
 		message: NewsroomMessage;
 		decryptedText?: string | undefined;
 		senderLabel?: string | undefined;
+		sameSender?: boolean;
 	} = $props();
 
 	const isSource = $derived(message.sender_role === 'source');
@@ -53,18 +55,20 @@
 			? 'bg-vault-surface border border-vault-border'
 			: 'bg-vault-green-muted border border-vault-green/20'}"
 	>
-		<!-- Header -->
-		<div class="flex items-center gap-2 mb-1">
-			<span
-				class="font-mono text-[10px] uppercase tracking-wider
-					{isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}"
-			>
-				{label}
-			</span>
-			<span class="text-[10px] text-vault-text-dim">
-				{relativeTime(message.created_at)}
-			</span>
-		</div>
+		<!-- Header: shown only when sender changes -->
+		{#if !sameSender}
+			<div class="flex items-center gap-2 mb-1">
+				<span
+					class="font-mono text-[10px] uppercase tracking-wider
+						{isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}"
+				>
+					{label}
+				</span>
+				<span class="text-[10px] text-vault-text-dim">
+					{relativeTime(message.created_at)}
+				</span>
+			</div>
+		{/if}
 
 		{#if isDecrypted}
 			<p class="text-sm text-vault-text whitespace-pre-wrap break-words">{decryptedText}</p>
@@ -77,6 +81,13 @@
 				<span class="font-mono text-[9px] text-vault-text-dim uppercase tracking-wider">
 					Encrypted
 				</span>
+			</div>
+		{/if}
+
+		<!-- Compact timestamp for grouped messages -->
+		{#if sameSender}
+			<div class="mt-0.5 text-[10px] text-vault-text-dim">
+				{relativeTime(message.created_at)}
 			</div>
 		{/if}
 	</div>
