@@ -3,17 +3,24 @@
 
 	let { status }: { status: TipStatus } = $props();
 
-	const styles: Record<TipStatus, string> = {
-		new: 'text-vault-amber bg-vault-amber-muted border-vault-amber/30',
-		review: 'text-vault-blue bg-vault-blue-muted border-vault-blue/30',
-		active: 'text-vault-green bg-vault-green-muted border-vault-green/30',
-		closed: 'text-vault-text-dim bg-vault-surface-raised border-vault-border'
+	const dotColors: Record<TipStatus, string> = {
+		new: 'bg-amber-400',
+		review: 'bg-blue-400',
+		active: 'bg-emerald-400',
+		closed: 'bg-zinc-500'
+	};
+
+	const textColors: Record<TipStatus, string> = {
+		new: 'text-amber-400/80',
+		review: 'text-blue-400/80',
+		active: 'text-emerald-400/80',
+		closed: 'text-zinc-500'
 	};
 </script>
 
-<span
-	class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider border {styles[status]}"
->
-	<span class="text-[6px]">●</span>
-	{status}
+<span class="inline-flex items-center gap-1.5">
+	<span class="w-1.5 h-1.5 rounded-full {dotColors[status]}"></span>
+	<span class="text-xs font-medium capitalize {textColors[status]}">
+		{status}
+	</span>
 </span>

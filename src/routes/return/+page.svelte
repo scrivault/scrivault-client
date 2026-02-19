@@ -112,18 +112,18 @@
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
 					</svg>
 				</div>
-				<span class="font-mono text-sm text-vault-text-muted tracking-wider uppercase">Scrivault</span>
+				<span class="text-sm text-vault-text-muted tracking-wide">Scrivault</span>
 			</div>
 			<h1 class="text-2xl font-semibold text-vault-text mb-2">Return to Your Conversation</h1>
 			<p class="text-sm text-vault-text-muted">
-				Enter the 12-word passphrase you received when you submitted your tip.
+				Enter the 12-word passphrase you received when you submitted your report.
 			</p>
 		</div>
 
 		<!-- Passphrase form -->
 		<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} autocomplete="off">
 			<div class="mb-6 p-5 rounded-lg bg-vault-surface border border-vault-border">
-				<div class="font-mono text-xs text-vault-text-muted uppercase tracking-wider mb-3">
+				<div class="text-xs text-vault-text-muted tracking-wide mb-3">
 					Recovery Passphrase
 				</div>
 				<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
@@ -178,11 +178,11 @@
 		<!-- Footer -->
 		<div class="mt-8 pt-6 border-t border-vault-border-subtle text-center space-y-3">
 			<p class="text-xs text-vault-text-dim">
-				Forgot your passphrase? You'll need to submit a new tip.<br />
+				Forgot your passphrase? You'll need to submit a new report.<br />
 				We cannot recover lost passphrases.
 			</p>
 			<a href="/" class="inline-block text-xs text-vault-text-muted hover:text-vault-text transition-colors underline underline-offset-2">
-				← Submit a new tip
+				← Submit a new report
 			</a>
 		</div>
 	</div>

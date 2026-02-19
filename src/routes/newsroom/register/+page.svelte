@@ -102,14 +102,14 @@
 </script>
 
 <svelte:head>
-	<title>Register — Scrivault Newsroom</title>
+	<title>Create Account — Scrivault</title>
 </svelte:head>
 
 <div class="min-h-screen flex items-center justify-center bg-vault-bg px-4">
 	<div class="w-full max-w-sm">
 		<!-- Header -->
 		<div class="text-center mb-8">
-			<h1 class="font-mono text-xs font-semibold tracking-[2px] uppercase text-vault-text">
+			<h1 class="text-sm font-semibold tracking-wide text-vault-text">
 				Scrivault
 			</h1>
 			<p class="text-sm text-vault-text-dim mt-2">Create Account</p>
@@ -166,7 +166,7 @@
 				<div>
 					<label
 						for="email"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 					>
 						Email
 					</label>
@@ -177,14 +177,14 @@
 						required
 						autocomplete="email"
 						class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-						placeholder="you@newsroom.org"
+						placeholder="name@yourorg.com"
 					/>
 				</div>
 
 				<div>
 					<label
 						for="display-name"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 					>
 						Display Name
 					</label>
@@ -202,7 +202,7 @@
 				<div>
 					<label
 						for="password"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 					>
 						Password
 					</label>
@@ -223,7 +223,7 @@
 				<div>
 					<label
 						for="confirm-password"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 					>
 						Confirm Password
 					</label>

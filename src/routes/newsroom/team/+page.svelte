@@ -151,7 +151,7 @@
 </script>
 
 <svelte:head>
-	<title>Team — Scrivault Newsroom</title>
+	<title>Team — Scrivault</title>
 </svelte:head>
 
 <div class="flex-1 overflow-y-auto p-6">
@@ -159,13 +159,13 @@
 		<!-- Header -->
 		<div>
 			<h1 class="text-lg font-semibold text-vault-text">Team</h1>
-			<p class="text-sm text-vault-text-muted mt-1">Manage your newsroom team members.</p>
+			<p class="text-sm text-vault-text-muted mt-1">Manage your team members.</p>
 		</div>
 
 		<!-- Team members list -->
 		<section>
 			<h2
-				class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mb-3"
+				class="text-[10px] tracking-wide font-medium text-zinc-500 mb-3"
 			>
 				Members
 			</h2>
@@ -196,7 +196,7 @@
 										? 'bg-vault-green-muted border border-vault-green/30'
 										: 'bg-vault-surface-raised border border-vault-border'}"
 								>
-									<span class="font-mono text-xs {isMe ? 'text-vault-green' : 'text-vault-text-dim'}">
+									<span class="text-xs {isMe ? 'text-vault-green' : 'text-vault-text-dim'}">
 										{initials(member.display_name)}
 									</span>
 								</div>
@@ -213,22 +213,15 @@
 								</div>
 							</div>
 							<div class="flex items-center gap-3 ml-3 shrink-0">
-								<span
-									class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono uppercase tracking-wider border
-										{member.role === 'editor'
-										? 'text-vault-amber bg-vault-amber-muted border-vault-amber/30'
-										: 'text-vault-blue bg-vault-blue-muted border-vault-blue/30'}"
-								>
-									{member.role}
-								</span>
-								<span class="font-mono text-[10px] text-vault-text-dim">
+								<span class="text-[11px] text-vault-text-muted capitalize">{member.role === 'reporter' ? 'Responder' : member.role}</span>
+								<span class="text-[10px] text-vault-text-dim">
 									{formatDate(member.created_at)}
 								</span>
 								{#if isEditor && !isMe}
 									<button
 										onclick={() => handleDeactivate(member)}
 										disabled={deactivatingId === member.id}
-										class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-red bg-vault-red-muted border border-vault-red/30 hover:bg-vault-red/20 transition-colors disabled:opacity-50"
+										class="text-[11px] text-vault-text-dim hover:text-vault-red transition-colors disabled:opacity-50"
 									>
 										{deactivatingId === member.id ? 'Deactivating…' : 'Deactivate'}
 									</button>
@@ -244,9 +237,9 @@
 		{#if isEditor}
 			<section>
 				<h2
-					class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mb-3"
+					class="text-[10px] tracking-wide font-medium text-zinc-500 mb-3"
 				>
-					Invite Journalist
+					Invite Team Member
 				</h2>
 				<form
 					onsubmit={(e) => {
@@ -258,7 +251,7 @@
 					<div class="flex-1">
 						<label
 							for="invite-email"
-							class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+							class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 						>
 							Email
 						</label>
@@ -268,13 +261,13 @@
 							bind:value={inviteEmail}
 							required
 							class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-							placeholder="journalist@newsroom.org"
+							placeholder="name@yourorg.com"
 						/>
 					</div>
 					<div class="w-32">
 						<label
 							for="invite-role"
-							class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+							class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 						>
 							Role
 						</label>
@@ -283,7 +276,7 @@
 							bind:value={inviteRole}
 							class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
 						>
-							<option value="reporter">Reporter</option>
+							<option value="reporter">Responder</option>
 							<option value="editor">Editor</option>
 						</select>
 					</div>
@@ -316,7 +309,7 @@
 			<!-- Pending invites -->
 			<section>
 				<h2
-					class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mb-3"
+					class="text-[10px] tracking-wide font-medium text-zinc-500 mb-3"
 				>
 					Pending Invites
 				</h2>
@@ -337,7 +330,7 @@
 							>
 								<div class="min-w-0 flex-1">
 									<p class="text-sm text-vault-text truncate">{invite.email}</p>
-									<p class="font-mono text-[10px] text-vault-text-dim uppercase">
+									<p class="text-[10px] text-vault-text-dim capitalize">
 										{invite.role} &middot; expires {new Date(invite.expires_at).toLocaleDateString()}
 									</p>
 								</div>
@@ -345,7 +338,7 @@
 									{#if getToken(invite)}
 										<button
 											onclick={() => copyLink(invite)}
-											class="px-3 py-1.5 rounded text-[11px] font-mono uppercase tracking-wider transition-colors
+											class="px-3 py-1.5 rounded text-[11px] transition-colors
 												{copiedId === invite.id
 												? 'text-vault-green bg-vault-green-muted border border-vault-green/30'
 												: 'text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text'}"
@@ -356,7 +349,7 @@
 									<button
 										onclick={() => handleRevoke(invite.id)}
 										disabled={revoking === invite.id}
-										class="px-3 py-1.5 rounded text-[11px] font-mono uppercase tracking-wider text-vault-red bg-vault-red-muted border border-vault-red/30 hover:bg-vault-red/20 transition-colors disabled:opacity-50"
+										class="px-3 py-1.5 rounded text-[11px] text-vault-red bg-vault-red-muted border border-vault-red/30 hover:bg-vault-red/20 transition-colors disabled:opacity-50"
 									>
 										{revoking === invite.id ? 'Revoking…' : 'Revoke'}
 									</button>
@@ -369,7 +362,7 @@
 		{:else}
 			<div class="p-4 rounded-lg bg-vault-surface border border-vault-border text-center">
 				<p class="text-sm text-vault-text-dim">
-					Only editors can manage team invitations.
+					Only editors can manage the team.
 				</p>
 			</div>
 		{/if}

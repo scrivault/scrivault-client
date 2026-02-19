@@ -48,7 +48,7 @@
 		</div>
 
 		<div class="text-center mb-8">
-			<h1 class="text-2xl font-semibold text-vault-text mb-2">Tip Submitted Successfully</h1>
+			<h1 class="text-2xl font-semibold text-vault-text mb-2">Report Submitted Successfully</h1>
 			<p class="text-sm text-vault-text-muted">
 				Your message has been encrypted and delivered.
 			</p>
@@ -73,12 +73,12 @@
 		<!-- Passphrase grid -->
 		<div class="mb-6 p-5 rounded-lg bg-vault-surface border border-vault-border">
 			<div class="flex items-center justify-between mb-3">
-				<div class="font-mono text-xs text-vault-text-muted uppercase tracking-wider">
+				<div class="text-xs text-vault-text-muted tracking-wide">
 					Recovery Passphrase
 				</div>
 				<button
 					onclick={handlePrint}
-					class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono text-vault-text-muted hover:text-vault-text border border-vault-border hover:border-vault-text-dim transition-colors print:hidden"
+					class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-vault-text-muted hover:text-vault-text border border-vault-border hover:border-vault-text-dim transition-colors print:hidden"
 					title="Print this page"
 				>
 					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,12 +99,12 @@
 
 		<!-- What this passphrase allows -->
 		<div class="mb-8 p-4 rounded-lg bg-vault-surface border border-vault-border-subtle">
-			<div class="font-mono text-xs text-vault-text-muted uppercase tracking-wider mb-3">
+			<div class="text-xs text-vault-text-muted tracking-wide mb-3">
 				This passphrase allows you to
 			</div>
 			<ul class="space-y-2">
 				{#each [
-					'Check for responses from the journalist',
+					'Check for responses',
 					'Continue the conversation',
 					'Upload additional documents',
 					'Revoke access to your files'

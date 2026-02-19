@@ -65,7 +65,7 @@
 </script>
 
 <svelte:head>
-	<title>Investigations — Scrivault Newsroom</title>
+	<title>Investigations — Scrivault</title>
 </svelte:head>
 
 <!-- Header -->
@@ -98,7 +98,7 @@
 				<div>
 					<label
 						for="codename"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 					>
 						Codename
 					</label>
@@ -113,16 +113,16 @@
 				<div>
 					<label
 						for="thread-id"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-zinc-500 mb-1.5"
 					>
-						Thread ID
+						Report ID
 					</label>
 					<input
 						id="thread-id"
 						type="text"
 						bind:value={newThreadId}
 						class="w-full bg-vault-bg border border-vault-border rounded px-3 py-2 text-sm font-mono text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-						placeholder="UUID of the tip thread"
+						placeholder="UUID of the report"
 					/>
 				</div>
 				{#if createError}
@@ -175,7 +175,7 @@
 	{:else if investigations.length === 0}
 		<EmptyState message="No investigations yet." />
 	{:else}
-		<div class="font-mono text-[11px] text-vault-text-dim mb-5">
+		<div class="text-[11px] text-vault-text-dim mb-5">
 			{investigations.length} investigation{investigations.length !== 1 ? 's' : ''}
 		</div>
 
@@ -183,17 +183,17 @@
 			<thead>
 				<tr>
 					<th
-						class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
+						class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border"
 					>
 						Codename
 					</th>
 					<th
-						class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
+						class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border"
 					>
-						Thread
+						Report
 					</th>
 					<th
-						class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
+						class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border"
 					>
 						Created
 					</th>
@@ -214,7 +214,7 @@
 							</span>
 						</td>
 						<td class="px-3 py-3.5 align-middle">
-							<span class="font-mono text-[11px] text-vault-text-dim">
+							<span class="text-[11px] text-vault-text-dim">
 								{formatDate(inv.created_at)}
 							</span>
 						</td>

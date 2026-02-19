@@ -36,7 +36,7 @@
 
 <svelte:head>
 	<title
-		>{investigation ? investigation.codename : 'Investigation'} — Scrivault Newsroom</title
+		>{investigation ? investigation.codename : 'Investigation'} — Scrivault</title
 	>
 </svelte:head>
 
@@ -105,12 +105,12 @@
 		<div class="p-5 rounded-lg bg-vault-surface border border-vault-border mb-6">
 			<h3 class="text-xl font-medium text-vault-text mb-1">{investigation.codename}</h3>
 			<div class="font-mono text-[11px] text-vault-text-dim mb-4">
-				Thread {investigation.thread_id.slice(0, 12)}…
+				Report {investigation.thread_id.slice(0, 12)}…
 			</div>
 
 			<div class="flex gap-6 flex-wrap">
 				<div>
-					<span class="block font-mono text-[9px] tracking-wider uppercase text-vault-text-dim">
+					<span class="block text-[10px] tracking-wide font-medium text-zinc-500">
 						Created
 					</span>
 					<span class="text-[13px] text-vault-text-muted">
@@ -118,7 +118,7 @@
 					</span>
 				</div>
 				<div>
-					<span class="block font-mono text-[9px] tracking-wider uppercase text-vault-text-dim">
+					<span class="block text-[10px] tracking-wide font-medium text-zinc-500">
 						Team Size
 					</span>
 					<span class="text-[13px] text-vault-text-muted">
@@ -126,14 +126,14 @@
 					</span>
 				</div>
 				<div>
-					<span class="block font-mono text-[9px] tracking-wider uppercase text-vault-text-dim">
-						Source Thread
+					<span class="block text-[10px] tracking-wide font-medium text-zinc-500">
+						Source Report
 					</span>
 					<a
 						href="/newsroom/tips/{investigation.thread_id}"
 						class="text-[13px] text-vault-text-muted hover:text-vault-text underline underline-offset-2 transition-colors"
 					>
-						View thread
+						View report
 					</a>
 				</div>
 			</div>
@@ -141,7 +141,7 @@
 
 		<!-- Members -->
 		<div
-			class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mb-4 pb-2 border-b border-vault-border"
+			class="text-[10px] tracking-wide font-medium text-zinc-500 mb-4 pb-2 border-b border-vault-border"
 		>
 			Team Members
 		</div>
@@ -158,7 +158,7 @@
 							<div
 								class="w-6 h-6 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center"
 							>
-								<span class="font-mono text-[9px] text-vault-text-dim">
+								<span class="text-[9px] text-vault-text-dim">
 									{member.display_name
 										.split(' ')
 										.map((w) => w[0])
@@ -171,7 +171,7 @@
 								<p class="text-[13px] font-medium text-vault-text">
 									{member.display_name}
 								</p>
-								<p class="font-mono text-[10px] text-vault-text-dim uppercase">
+								<p class="text-[10px] text-vault-text-dim capitalize">
 									{member.role}
 								</p>
 							</div>

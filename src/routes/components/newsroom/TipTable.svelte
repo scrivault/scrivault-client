@@ -39,34 +39,22 @@
 <table class="w-full border-collapse">
 	<thead>
 		<tr>
-			<th
-				class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
-			>
+			<th class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border">
 				Status
 			</th>
-			<th
-				class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
-			>
-				Tip
+			<th class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border">
+				Report
 			</th>
-			<th
-				class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
-			>
+			<th class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border">
 				Assigned
 			</th>
-			<th
-				class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
-			>
+			<th class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border">
 				Msgs
 			</th>
-			<th
-				class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
-			>
+			<th class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border">
 				Docs
 			</th>
-			<th
-				class="text-left font-mono text-[9px] tracking-[1.5px] uppercase text-vault-text-dim font-medium px-3 py-2 border-b border-vault-border"
-			>
+			<th class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border">
 				Last Activity
 			</th>
 		</tr>
@@ -82,7 +70,12 @@
 					<StatusPill status={tip.status} />
 				</td>
 				<td class="px-3 py-3.5 align-middle">
-					<span class="font-mono text-[12px] text-vault-text">{truncateId(tip.blinded_id)}…</span>
+					<div class="flex items-center gap-2">
+						{#if hasUnread}
+							<span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+						{/if}
+						<span class="font-mono text-[12px] text-vault-text">{truncateId(tip.blinded_id)}…</span>
+					</div>
 				</td>
 				<td class="px-3 py-3.5 align-middle">
 					{#if tip.assignee_name}
@@ -99,7 +92,7 @@
 								</span>
 							</div>
 							{#if isMe}
-								<span class="text-[12px] font-mono text-vault-green">You</span>
+								<span class="text-[12px] text-vault-green">You</span>
 							{:else}
 								<span class="text-[12px] text-vault-text-muted">{tip.assignee_name}</span>
 							{/if}
@@ -110,15 +103,12 @@
 				</td>
 				<td class="px-3 py-3.5 align-middle">
 					<span class="font-mono text-[11px] text-vault-text-muted">{tip.message_count}</span>
-					{#if hasUnread}
-						<span class="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-vault-amber text-[9px] font-mono font-bold text-vault-bg">{tip.unread_count}</span>
-					{/if}
 				</td>
 				<td class="px-3 py-3.5 align-middle">
 					<span class="font-mono text-[11px] text-vault-text-muted">{tip.document_count}</span>
 				</td>
 				<td class="px-3 py-3.5 align-middle">
-					<span class="font-mono text-[11px] text-vault-text-dim">
+					<span class="text-[11px] text-vault-text-dim">
 						{formatTimeAgo(tip.last_activity)}
 					</span>
 				</td>

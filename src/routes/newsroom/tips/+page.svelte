@@ -42,7 +42,7 @@
 				allTips = tips;
 			}
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to load tips.';
+			error = err instanceof Error ? err.message : 'Failed to load reports.';
 		} finally {
 			loading = false;
 		}
@@ -93,14 +93,14 @@
 </script>
 
 <svelte:head>
-	<title>Tips — Scrivault Newsroom</title>
+	<title>Reports — Scrivault</title>
 </svelte:head>
 
 <!-- Header -->
 <div
 	class="flex items-center justify-between px-6 py-4 border-b border-vault-border bg-vault-surface"
 >
-	<h2 class="text-lg font-medium text-vault-text">Tips</h2>
+	<h2 class="text-lg font-medium text-vault-text">Reports</h2>
 </div>
 
 <!-- Content -->
@@ -123,7 +123,7 @@
 						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
 					></path>
 				</svg>
-				<span class="text-sm">Loading tips…</span>
+				<span class="text-sm">Loading reports…</span>
 			</div>
 		</div>
 	{:else if error}
@@ -140,8 +140,8 @@
 		</div>
 	{:else}
 		<!-- Stats line -->
-		<div class="font-mono text-[11px] text-vault-text-dim mb-5">
-			{stats.total} tips · {stats.new} new · {stats.review} review · {stats.active} active · {stats.docs}
+		<div class="text-[11px] text-vault-text-dim mb-5">
+			{stats.total} reports · {stats.new} new · {stats.review} review · {stats.active} active · {stats.docs}
 			docs
 		</div>
 
@@ -150,7 +150,7 @@
 			{#each filters as f}
 				<button
 					onclick={() => handleFilterChange(f.value)}
-					class="px-3 py-1.5 rounded text-[12px] font-mono transition-colors
+					class="px-3 py-1.5 rounded text-[12px] transition-colors
 						{statusFilter === f.value
 						? 'bg-vault-surface-raised text-vault-text border border-vault-border'
 						: 'text-vault-text-dim hover:text-vault-text-muted'}"
@@ -162,7 +162,7 @@
 
 		<!-- Table -->
 		{#if tips.length === 0}
-			<EmptyState message="No tips match this filter." />
+			<EmptyState message="No reports match this filter." />
 		{:else}
 			<TipTable tips={tips} onRowClick={handleRowClick} currentUserId={user?.journalist_id ?? null} />
 		{/if}

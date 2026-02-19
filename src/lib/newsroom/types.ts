@@ -102,6 +102,22 @@ export interface NewsroomSendMessageResponse {
 	created_at: string;
 }
 
+// ── Documents ────────────────────────────────────────────
+
+export interface DocumentMeta {
+	id: string;
+	thread_id: string;
+	sha256_hash: string;
+	file_size: number;
+	encrypted_name?: string; // base64
+	name_nonce?: string; // base64
+	created_at: string;
+}
+
+export interface DocumentListResponse {
+	documents: DocumentMeta[];
+}
+
 // ── Investigations ────────────────────────────────────────
 
 export interface CreateInvestigationRequest {

@@ -16,7 +16,7 @@
 	const isSource = $derived(message.sender_role === 'source');
 	const isDecrypted = $derived(decryptedText !== undefined);
 
-	const label = $derived(senderLabel ?? (isSource ? 'Source' : 'Journalist'));
+	const label = $derived(senderLabel ?? (isSource ? 'Sender' : 'Responder'));
 
 	function relativeTime(iso: string): string {
 		const date = new Date(iso);
@@ -50,17 +50,17 @@
 
 <div class="flex {isSource ? 'justify-start' : 'justify-end'}">
 	<div
-		class="max-w-[80%] rounded-lg px-4 py-2.5
+		class="max-w-[75%] rounded-lg px-4 py-2.5
 			{isSource
 			? 'bg-vault-surface border border-vault-border'
-			: 'bg-vault-green-muted border border-vault-green/20'}"
+			: 'bg-green-900/40 border border-green-800/30'}"
 	>
 		<!-- Header: shown only when sender changes -->
 		{#if !sameSender}
 			<div class="flex items-center gap-2 mb-1">
 				<span
-					class="font-mono text-[10px] uppercase tracking-wider
-						{isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}"
+					class="text-[11px] font-medium
+						{isSource ? 'text-zinc-400' : 'text-green-400/70'}"
 				>
 					{label}
 				</span>
@@ -78,7 +78,7 @@
 			</div>
 			<div class="mt-1.5 flex items-center gap-1.5">
 				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
-				<span class="font-mono text-[9px] text-vault-text-dim uppercase tracking-wider">
+				<span class="text-[9px] text-vault-text-dim">
 					Encrypted
 				</span>
 			</div>

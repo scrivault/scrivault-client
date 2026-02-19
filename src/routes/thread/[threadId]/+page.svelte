@@ -452,7 +452,7 @@
 			<div class="flex items-center gap-2">
 				<div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-vault-green/30 bg-vault-green-muted">
 					<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
-					<span class="font-mono text-[10px] text-vault-green">ENCRYPTED</span>
+					<span class="text-[10px] text-vault-green">Encrypted</span>
 				</div>
 			</div>
 		</div>
@@ -498,8 +498,8 @@
 							<div class="max-w-[90%] sm:max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-3 sm:px-4 py-2.5">
 								{#if !sameSender}
 									<div class="flex items-center gap-2 mb-1">
-										<span class="font-mono text-[10px] uppercase tracking-wider {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
-											{isSource ? 'You' : 'Reporter'}
+										<span class="text-[11px] font-medium {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
+											{isSource ? 'You' : 'Responder'}
 										</span>
 										<span class="text-[10px] text-vault-text-dim">
 											{relativeTime(msg.createdAt)}

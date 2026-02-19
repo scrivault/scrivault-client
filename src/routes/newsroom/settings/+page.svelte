@@ -106,7 +106,7 @@
 </script>
 
 <svelte:head>
-	<title>Settings — Scrivault Newsroom</title>
+	<title>Settings — Scrivault</title>
 </svelte:head>
 
 <!-- Header -->
@@ -120,7 +120,7 @@
 
 		<!-- Account info -->
 		<section>
-			<h3 class="font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-3">
+			<h3 class="text-[10px] tracking-wide font-medium text-zinc-500 mb-3">
 				Account
 			</h3>
 			<div class="rounded-lg bg-vault-surface border border-vault-border p-4 space-y-3">
@@ -137,18 +137,18 @@
 					<div class="w-full h-px bg-vault-border-subtle"></div>
 					<div class="flex items-center justify-between">
 						<span class="text-xs text-vault-text-muted">Role</span>
-						<span class="text-xs text-vault-text font-mono uppercase">{user.role}</span>
+						<span class="text-xs text-vault-text capitalize">{user.role === 'reporter' ? 'Responder' : user.role}</span>
 					</div>
 					<div class="w-full h-px bg-vault-border-subtle"></div>
 					<div class="flex items-center justify-between">
 						<span class="text-xs text-vault-text-muted">Encryption keys</span>
 						{#if privateKey}
-							<span class="inline-flex items-center gap-1 text-[10px] font-mono text-vault-green">
+							<span class="inline-flex items-center gap-1 text-[10px] text-vault-green">
 								<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
 								Active
 							</span>
 						{:else}
-							<span class="inline-flex items-center gap-1 text-[10px] font-mono text-vault-amber">
+							<span class="inline-flex items-center gap-1 text-[10px] text-vault-amber">
 								<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
 								Not loaded
 							</span>
@@ -160,7 +160,7 @@
 
 		<!-- Change password -->
 		<section>
-			<h3 class="font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-3">
+			<h3 class="text-[10px] tracking-wide font-medium text-zinc-500 mb-3">
 				Change Password
 			</h3>
 			<div class="rounded-lg bg-vault-surface border border-vault-border p-4">
@@ -189,7 +189,7 @@
 								bind:value={currentPassword}
 								autocomplete="current-password"
 								disabled={changing}
-								class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text font-mono placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
+								class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
 							/>
 						</div>
 
@@ -206,7 +206,7 @@
 								bind:value={newPassword}
 								autocomplete="new-password"
 								disabled={changing}
-								class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text font-mono placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
+								class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
 							/>
 							{#if newPassword && !passwordLongEnough}
 								<p class="text-[10px] text-vault-red mt-1">
@@ -228,7 +228,7 @@
 								bind:value={confirmPassword}
 								autocomplete="new-password"
 								disabled={changing}
-								class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text font-mono placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
+								class="w-full bg-vault-bg border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
 							/>
 							{#if confirmPassword && !passwordsMatch}
 								<p class="text-[10px] text-vault-red mt-1">Passwords do not match</p>

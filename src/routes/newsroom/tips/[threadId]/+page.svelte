@@ -7,6 +7,7 @@
 		unsealThreadKey,
 		decryptMessage,
 		encryptMessage,
+		decryptFile,
 		sealThreadKeyForJournalist,
 		fromBase64,
 		toBase64
@@ -15,7 +16,7 @@
 	import type { ProvenanceEntry } from '$lib/api';
 	import { getToken } from '$lib/newsroom/auth';
 	import { createWsConnection, newsroomWsUrl } from '$lib/ws';
-	import type { NewsroomMessage, TipStatus, TeamMember, ThreadNote } from '$lib/newsroom/types';
+	import type { NewsroomMessage, TipStatus, TeamMember, ThreadNote, DocumentMeta } from '$lib/newsroom/types';
 	import MessageBubble from '../../../components/newsroom/MessageBubble.svelte';
 	import StatusPill from '../../../components/newsroom/StatusPill.svelte';
 
@@ -61,6 +62,17 @@
 	let newNoteText = $state('');
 	let savingNote = $state(false);
 
+	// Documents state
+	interface DecryptedDoc {
+		id: string;
+		fileName: string;
+		fileSize: number;
+		blobUrl: string | null;
+		createdAt: string;
+	}
+	let threadDocuments: DocumentMeta[] = $state([]);
+	let decryptedDocs: Map<string, DecryptedDoc> = $state(new Map());
+
 	// Export state
 	let showExportModal = $state(false);
 	let exportFormat: 'text' | 'json' = $state('text');
@@ -86,8 +98,8 @@
 	}
 
 	function senderLabel(msg: NewsroomMessage): string {
-		if (msg.sender_role === 'source') return 'Source';
-		return user?.display_name ?? 'Journalist';
+		if (msg.sender_role === 'source') return 'Sender';
+		return user?.display_name ?? 'Responder';
 	}
 
 	function initials(name: string): string {
@@ -157,6 +169,82 @@
 		decryptedNotes = newMap;
 	}
 
+	async function loadDocuments() {
+		try {
+			const res = await newsroomApi.getDocuments(threadId);
+			threadDocuments = res.documents ?? [];
+		} catch {
+			// Non-critical
+		}
+	}
+
+	async function decryptAllDocuments() {
+		if (!threadKey) return;
+		const newMap = new Map<string, DecryptedDoc>();
+		for (const doc of threadDocuments) {
+			try {
+				// Decrypt filename if available
+				let fileName = `document-${doc.id.slice(0, 8)}`;
+				if (doc.encrypted_name && doc.name_nonce) {
+					try {
+						const nameBytes = await decryptFile(
+							fromBase64(doc.encrypted_name),
+							fromBase64(doc.name_nonce),
+							threadKey
+						);
+						fileName = new TextDecoder().decode(nameBytes);
+					} catch { /* use default name */ }
+				}
+
+				newMap.set(doc.id, {
+					id: doc.id,
+					fileName,
+					fileSize: doc.file_size,
+					blobUrl: null,
+					createdAt: doc.created_at
+				});
+			} catch {
+				// skip unreadable docs
+			}
+		}
+		decryptedDocs = newMap;
+	}
+
+	async function handleDownloadDocument(docId: string) {
+		if (!threadKey) return;
+		try {
+			// Fetch full encrypted document via source-side endpoint
+			const res = await fetch(`/api/documents/${docId}`, {
+				headers: { Authorization: `Bearer ${getToken()}` }
+			});
+			if (!res.ok) throw new Error('Failed to fetch document');
+			const data = await res.json();
+			const plaintext = await decryptFile(
+				fromBase64(data.ciphertext),
+				fromBase64(data.nonce),
+				threadKey
+			);
+			const blob = new Blob([plaintext]);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			const doc = decryptedDocs.get(docId);
+			a.download = doc?.fileName ?? `document-${docId.slice(0, 8)}`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			console.warn('Failed to download document:', err);
+		}
+	}
+
+	function formatFileSize(bytes: number): string {
+		if (bytes < 1024) return `${bytes} B`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+		return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	}
+
 	async function loadThread() {
 		loading = true;
 		error = '';
@@ -187,6 +275,10 @@
 			// Load internal notes
 			await loadNotes();
 			await decryptAllNotes();
+
+			// Load documents
+			await loadDocuments();
+			await decryptAllDocuments();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load thread.';
 		} finally {
@@ -455,7 +547,7 @@
 
 	function buildExportData(provenance: ProvenanceEntry[]): ExportData {
 		const exportMessages: ExportMessage[] = messages.map((msg) => ({
-			sender: msg.sender_role === 'source' ? 'Source' : (user?.display_name ?? 'Journalist'),
+			sender: msg.sender_role === 'source' ? 'Sender' : (user?.display_name ?? 'Responder'),
 			timestamp: msg.created_at,
 			content: decryptedTexts.get(msg.id) ?? '[unable to decrypt]'
 		}));
@@ -592,6 +684,9 @@
 				if (notification.type === 'new_message') {
 					refreshMessages();
 				}
+				if (notification.type === 'new_document') {
+					loadDocuments().then(() => decryptAllDocuments());
+				}
 			}
 		});
 
@@ -602,7 +697,7 @@
 </script>
 
 <svelte:head>
-	<title>Thread {shortId}… — Scrivault Newsroom</title>
+	<title>Report {shortId}… — Scrivault</title>
 </svelte:head>
 
 <!-- Header -->
@@ -612,7 +707,7 @@
 	<div class="flex items-center gap-3">
 		<a
 			href="/newsroom/tips"
-			aria-label="Back to tips"
+			aria-label="Back to reports"
 			class="text-vault-text-muted hover:text-vault-text transition-colors"
 		>
 			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -625,21 +720,15 @@
 			</svg>
 		</a>
 		<div>
-			<h2 class="text-sm font-medium text-vault-text">Thread</h2>
+			<h2 class="text-sm font-medium text-vault-text">Report</h2>
 			<span class="font-mono text-[11px] text-vault-text-dim">{shortId}…</span>
 		</div>
 	</div>
 	<div class="flex items-center gap-2">
 		{#if canDecrypt}
-			<div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-vault-green/30 bg-vault-green-muted">
-				<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
-				<span class="font-mono text-[10px] text-vault-green">ENCRYPTED</span>
-			</div>
+			<div class="inline-flex items-center gap-1.5"><div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div><span class="text-[10px] text-vault-green">Decrypted</span></div>
 		{:else if !loading && !error}
-			<div class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-vault-amber/20 bg-vault-amber/10">
-				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
-				<span class="font-mono text-[10px] text-vault-amber">ENCRYPTED</span>
-			</div>
+			<div class="inline-flex items-center gap-1.5"><div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div><span class="text-[10px] text-vault-amber">Encrypted</span></div>
 		{/if}
 		<StatusPill status={tipStatus} />
 	</div>
@@ -652,7 +741,7 @@
 				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 				<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 			</svg>
-			<span class="text-sm">Loading thread…</span>
+			<span class="text-sm">Loading report…</span>
 		</div>
 	</div>
 {:else if error}
@@ -677,7 +766,7 @@
 					<button
 						onclick={() => handleStatusChange(s)}
 						disabled={updating}
-						class="px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors
+						class="px-1.5 py-0.5 rounded text-[10px] transition-colors
 							{tipStatus === s
 							? 'bg-vault-surface-raised text-vault-text border border-vault-border'
 							: 'text-vault-text-dim hover:text-vault-text-muted'}"
@@ -694,11 +783,11 @@
 				<div class="flex items-center gap-2">
 					<div class="flex items-center gap-1.5">
 						<div class="w-4 h-4 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center">
-							<span class="font-mono text-[7px] text-vault-text-dim">
+							<span class="text-[7px] text-vault-text-dim">
 								{initials(assigneeName ?? '??')}
 							</span>
 						</div>
-						<span class="text-[10px] font-mono text-vault-text-muted">
+						<span class="text-[10px] text-vault-text-muted">
 							{isAssignedToMe ? 'Assigned to you' : `Assigned to ${assigneeName ?? 'Unknown'}`}
 						</span>
 					</div>
@@ -706,7 +795,7 @@
 						<button
 							onclick={handleUnassign}
 							disabled={updating}
-							class="text-[10px] font-mono text-vault-text-dim hover:text-vault-red transition-colors disabled:opacity-30"
+							class="text-[10px] text-vault-text-dim hover:text-vault-red transition-colors disabled:opacity-30"
 						>
 							Unassign
 						</button>
@@ -719,7 +808,7 @@
 					<button
 						onclick={handleAssignToMe}
 						disabled={updating}
-						class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
+						class="text-[10px] text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
 					>
 						Assign to me
 					</button>
@@ -730,9 +819,9 @@
 				<button
 					onclick={openAssignModal}
 					disabled={updating}
-					class="text-[10px] font-mono text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
+					class="text-[10px] text-vault-text-dim hover:text-vault-text transition-colors disabled:opacity-30"
 				>
-					Assign to reporter
+					Assign to team member
 				</button>
 			{/if}
 
@@ -741,7 +830,7 @@
 			{#if canDecrypt && decryptedTexts.size > 0}
 				<button
 					onclick={openExportModal}
-					class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-text-dim hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors"
+					class="px-2.5 py-1 rounded text-[10px] text-vault-text-dim hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors"
 				>
 					<span class="inline-flex items-center gap-1">
 						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -755,7 +844,7 @@
 				<button
 					onclick={openInvestigationModal}
 					disabled={updating}
-					class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
+					class="px-2.5 py-1 rounded text-[10px] text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
 				>
 					Create Investigation
 				</button>
@@ -772,7 +861,7 @@
 	{#if decryptError}
 		<div class="mx-6 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-vault-amber/10 border border-vault-amber/20 shrink-0">
 			<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60 shrink-0"></div>
-			<span class="font-mono text-[11px] text-vault-amber">{decryptError}</span>
+			<span class="text-[11px] text-vault-amber">{decryptError}</span>
 		</div>
 	{/if}
 
@@ -780,7 +869,7 @@
 	<div class="flex-1 overflow-y-auto px-6 py-6">
 		{#if messages.length === 0}
 			<div class="flex items-center justify-center py-12 text-sm text-vault-text-dim">
-				No messages in this thread.
+				No messages yet.
 			</div>
 		{:else}
 			{#each messages as msg, i (msg.id)}
@@ -795,6 +884,36 @@
 				</div>
 			{/each}
 		{/if}
+		<!-- Documents section -->
+		{#if decryptedDocs.size > 0}
+			<div class="mt-6 pt-4 border-t border-vault-border/50">
+				<p class="text-[10px] font-medium tracking-wide text-zinc-500 mb-3">
+					Attached Files ({decryptedDocs.size})
+				</p>
+				<div class="space-y-2">
+					{#each [...decryptedDocs.values()] as doc (doc.id)}
+						<button
+							onclick={() => handleDownloadDocument(doc.id)}
+							class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-vault-surface border border-vault-border hover:border-vault-green/30 transition-colors text-left group"
+						>
+							<div class="w-8 h-8 rounded bg-vault-surface-raised border border-vault-border flex items-center justify-center shrink-0">
+								<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+								</svg>
+							</div>
+							<div class="min-w-0 flex-1">
+								<p class="text-xs text-vault-text truncate">{doc.fileName}</p>
+								<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
+							</div>
+							<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+							</svg>
+						</button>
+					{/each}
+				</div>
+			</div>
+		{/if}
+
 		<div bind:this={scrollAnchor}></div>
 	</div>
 
@@ -805,7 +924,7 @@
 				onclick={() => { showNotes = !showNotes; }}
 				class="w-full flex items-center justify-between px-6 py-2 text-left hover:bg-vault-surface-raised/50 transition-colors"
 			>
-				<span class="font-mono text-[10px] tracking-wider uppercase text-vault-text-dim">
+				<span class="text-[10px] tracking-wide font-medium text-vault-text-dim">
 					Internal Notes {notes.length > 0 ? `(${notes.length})` : ''}
 				</span>
 				<svg class="w-3 h-3 text-vault-text-dim transition-transform {showNotes ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -848,7 +967,7 @@
 						<button
 							type="submit"
 							disabled={!newNoteText.trim() || savingNote}
-							class="px-2.5 py-1.5 rounded text-[10px] font-mono bg-vault-surface-raised border border-vault-border text-vault-text-muted hover:text-vault-text transition-colors disabled:opacity-30"
+							class="px-2.5 py-1.5 rounded text-[10px] bg-vault-surface-raised border border-vault-border text-vault-text-muted hover:text-vault-text transition-colors disabled:opacity-30"
 						>
 							{savingNote ? '…' : 'Add'}
 						</button>
@@ -906,7 +1025,7 @@
 		{:else}
 			<div class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-vault-surface border border-vault-border">
 				<div class="w-1.5 h-1.5 rounded-full bg-vault-amber/60"></div>
-				<span class="font-mono text-[11px] text-vault-text-dim">
+				<span class="text-[11px] text-vault-text-dim">
 					{decryptError || 'No decryption key available — replies disabled'}
 				</span>
 			</div>
@@ -923,11 +1042,11 @@
 		onkeydown={(e) => { if (e.key === 'Escape') showAssignModal = false; }}
 		role="dialog"
 		aria-modal="true"
-		aria-label="Assign to reporter"
+		aria-label="Assign to team member"
 	>
 		<div class="w-full max-w-sm mx-4 rounded-lg bg-vault-surface border border-vault-border shadow-2xl">
 			<div class="px-4 py-3 border-b border-vault-border">
-				<h3 class="font-mono text-xs text-vault-text">Assign to team member</h3>
+				<h3 class="text-xs text-vault-text">Assign to team member</h3>
 			</div>
 			<div class="max-h-64 overflow-y-auto">
 				{#if loadingTeam}
@@ -949,13 +1068,13 @@
 							class="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-vault-surface-raised disabled:opacity-50 border-b border-vault-border last:border-b-0"
 						>
 							<div class="w-7 h-7 rounded-full bg-vault-surface-raised border border-vault-border flex items-center justify-center shrink-0">
-								<span class="font-mono text-[9px] text-vault-text-dim">
+								<span class="text-[9px] text-vault-text-dim">
 									{initials(member.display_name)}
 								</span>
 							</div>
 							<div class="min-w-0 flex-1">
 								<p class="text-sm text-vault-text truncate">{member.display_name}</p>
-								<p class="font-mono text-[10px] text-vault-text-dim uppercase">{member.role}</p>
+								<p class="text-[10px] text-vault-text-dim capitalize">{member.role}</p>
 							</div>
 							{#if assigningMemberId === member.id}
 								<svg class="w-4 h-4 animate-spin text-vault-green shrink-0" fill="none" viewBox="0 0 24 24">
@@ -970,7 +1089,7 @@
 			<div class="px-4 py-3 border-t border-vault-border">
 				<button
 					onclick={() => { showAssignModal = false; }}
-					class="w-full px-3 py-2 rounded text-[11px] font-mono text-vault-text-muted hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors"
+					class="w-full px-3 py-2 rounded text-[11px] text-vault-text-muted hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors"
 				>
 					Cancel
 				</button>
@@ -992,7 +1111,7 @@
 	>
 		<div class="w-full max-w-sm mx-4 rounded-lg bg-vault-surface border border-vault-border shadow-2xl">
 			<div class="px-4 py-3 border-b border-vault-border">
-				<h3 class="font-mono text-xs text-vault-text">Create Investigation</h3>
+				<h3 class="text-xs text-vault-text">Create Investigation</h3>
 			</div>
 			<form
 				onsubmit={(e) => {
@@ -1004,7 +1123,7 @@
 				<div>
 					<label
 						for="investigation-codename"
-						class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+						class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-1.5"
 					>
 						Codename
 					</label>
@@ -1022,14 +1141,14 @@
 					<button
 						type="button"
 						onclick={() => { showInvestigationModal = false; }}
-						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
+						class="flex-1 px-3 py-2 rounded text-[11px] text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
 					>
 						Cancel
 					</button>
 					<button
 						type="submit"
 						disabled={!investigationCodename.trim() || creatingInvestigation}
-						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+						class="flex-1 px-3 py-2 rounded text-[11px] text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
 					>
 						{creatingInvestigation ? 'Creating…' : 'Create'}
 					</button>
@@ -1052,7 +1171,7 @@
 	>
 		<div class="w-full max-w-sm mx-4 rounded-lg bg-vault-surface border border-vault-border shadow-2xl">
 			<div class="px-4 py-3 border-b border-vault-border">
-				<h3 class="font-mono text-xs text-vault-text">Export for Publication</h3>
+				<h3 class="text-xs text-vault-text">Export for Publication</h3>
 			</div>
 			<div class="p-4 space-y-4">
 				<p class="text-xs text-vault-text-muted">
@@ -1061,13 +1180,13 @@
 
 				<!-- Format selection -->
 				<div>
-					<span class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-2">
+					<span class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-2">
 						Format
 					</span>
 					<div class="flex gap-2">
 						<button
 							onclick={() => { exportFormat = 'text'; }}
-							class="flex-1 px-3 py-2 rounded text-xs font-mono transition-colors
+							class="flex-1 px-3 py-2 rounded text-xs transition-colors
 								{exportFormat === 'text'
 								? 'bg-vault-surface-raised text-vault-text border border-vault-green/40'
 								: 'bg-vault-bg text-vault-text-dim border border-vault-border hover:text-vault-text-muted'}"
@@ -1076,7 +1195,7 @@
 						</button>
 						<button
 							onclick={() => { exportFormat = 'json'; }}
-							class="flex-1 px-3 py-2 rounded text-xs font-mono transition-colors
+							class="flex-1 px-3 py-2 rounded text-xs transition-colors
 								{exportFormat === 'json'
 								? 'bg-vault-surface-raised text-vault-text border border-vault-green/40'
 								: 'bg-vault-bg text-vault-text-dim border border-vault-border hover:text-vault-text-muted'}"
@@ -1098,7 +1217,7 @@
 
 				<!-- Summary -->
 				<div class="px-3 py-2 rounded bg-vault-bg border border-vault-border-subtle">
-					<div class="flex items-center justify-between text-[10px] font-mono text-vault-text-dim">
+					<div class="flex items-center justify-between text-[10px] text-vault-text-dim">
 						<span>{decryptedTexts.size} messages</span>
 						<span>{exportFormat === 'text' ? '.txt' : '.json'}</span>
 					</div>
@@ -1113,14 +1232,14 @@
 					<button
 						type="button"
 						onclick={() => { showExportModal = false; }}
-						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
+						class="flex-1 px-3 py-2 rounded text-[11px] text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
 					>
 						Cancel
 					</button>
 					<button
 						onclick={handleExport}
 						disabled={exporting}
-						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+						class="flex-1 px-3 py-2 rounded text-[11px] text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
 					>
 						{#if exporting}
 							Exporting…

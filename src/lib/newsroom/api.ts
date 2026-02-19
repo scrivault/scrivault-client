@@ -40,7 +40,8 @@ import type {
 	ThreadNoteListResponse,
 	CreateThreadNoteRequest,
 	ChangePasswordRequest,
-	ChangePasswordResponse
+	ChangePasswordResponse,
+	DocumentListResponse
 } from './types';
 
 const BASE = '/api';
@@ -128,6 +129,15 @@ export const newsroomApi = {
 			`/newsroom/tips/${encodeURIComponent(threadId)}/messages`,
 			requireToken(),
 			{ method: 'POST', body: JSON.stringify(req) }
+		);
+	},
+
+	// Documents (protected)
+
+	getDocuments(threadId: string): Promise<DocumentListResponse> {
+		return authRequest<DocumentListResponse>(
+			`/newsroom/tips/${encodeURIComponent(threadId)}/documents`,
+			requireToken()
 		);
 	},
 

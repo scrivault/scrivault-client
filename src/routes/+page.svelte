@@ -201,7 +201,7 @@
 </script>
 
 <svelte:head>
-	<title>Submit a Tip — {org?.name ?? 'Scrivault'}</title>
+	<title>Submit a Report — {org?.name ?? 'Scrivault'}</title>
 </svelte:head>
 
 <div class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
@@ -214,9 +214,9 @@
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
 					</svg>
 				</div>
-				<span class="font-mono text-sm text-vault-text-muted tracking-wider uppercase">{org?.name ?? 'Scrivault'}</span>
+				<span class="text-sm text-vault-text-muted tracking-wide">{org?.name ?? 'Scrivault'}</span>
 			</div>
-			<h1 class="text-2xl font-semibold text-vault-text mb-2">{org ? `${org.name} Secure Tip Line` : 'Submit a Secure Tip'}</h1>
+			<h1 class="text-2xl font-semibold text-vault-text mb-2">{org ? `${org.name} Secure Channel` : 'Secure Channel'}</h1>
 			<p class="text-sm text-vault-text-muted max-w-md mx-auto">
 				Your message is encrypted in your browser before transmission.
 				No account required. No identifying information collected.
@@ -227,7 +227,7 @@
 		<div class="flex justify-center mb-8">
 			<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-vault-green/30 bg-vault-green-muted">
 				<div class="w-1.5 h-1.5 rounded-full bg-vault-green animate-pulse"></div>
-				<span class="font-mono text-xs text-vault-green">End-to-end encrypted</span>
+				<span class="text-xs text-vault-green">End-to-end encrypted</span>
 			</div>
 		</div>
 
@@ -277,7 +277,7 @@
 		<form onsubmit={(e) => { e.preventDefault(); handleSubmit(); }} autocomplete="off" class="space-y-5">
 			<!-- Topic -->
 			<div>
-				<label for="topic" class="block font-mono text-xs text-vault-text-muted mb-1.5 uppercase tracking-wider">
+				<label for="topic" class="block text-xs text-vault-text-muted mb-1.5 tracking-wide">
 					Topic
 				</label>
 				<select
@@ -294,7 +294,7 @@
 
 			<!-- Subject -->
 			<div>
-				<label for="subject" class="block font-mono text-xs text-vault-text-muted mb-1.5 uppercase tracking-wider">
+				<label for="subject" class="block text-xs text-vault-text-muted mb-1.5 tracking-wide">
 					Subject
 				</label>
 				<input
@@ -309,7 +309,7 @@
 
 			<!-- Message -->
 			<div>
-				<label for="message" class="block font-mono text-xs text-vault-text-muted mb-1.5 uppercase tracking-wider">
+				<label for="message" class="block text-xs text-vault-text-muted mb-1.5 tracking-wide">
 					Message <span class="text-vault-red">*</span>
 				</label>
 				<textarea
@@ -325,8 +325,8 @@
 
 			<!-- File upload -->
 			<div>
-				<label for="files" class="block font-mono text-xs text-vault-text-muted mb-1.5 uppercase tracking-wider">
-					Attach Files <span class="text-vault-text-dim">(max 50MB each)</span>
+				<label for="files" class="block text-xs text-vault-text-muted mb-1.5 tracking-wide">
+					Attach Files
 				</label>
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
@@ -364,9 +364,9 @@
 								<span class="truncate min-w-0">{file.name}</span>
 								<span class="text-vault-text-dim shrink-0 hidden sm:inline">({(file.size / 1024).toFixed(1)} KB)</span>
 								{#if isImageFile(file)}
-									<span class="text-vault-green text-[9px] shrink-0 hidden sm:inline">EXIF stripped</span>
+									<span class="text-vault-green text-[10px] shrink-0 hidden sm:inline">EXIF stripped</span>
 								{:else}
-									<span class="text-vault-amber text-[9px] shrink-0 hidden sm:inline">metadata</span>
+									<span class="text-vault-amber text-[10px] shrink-0 hidden sm:inline">metadata</span>
 								{/if}
 								<button
 									type="button"
@@ -421,7 +421,7 @@
 				Your IP address is not logged. No cookies are used.
 			</p>
 			<a href="/return" class="inline-block text-xs text-vault-text-muted hover:text-vault-text transition-colors underline underline-offset-2">
-				Already submitted a tip? Return to your conversation →
+				Already submitted? Return to your conversation →
 			</a>
 		</div>
 	</div>
