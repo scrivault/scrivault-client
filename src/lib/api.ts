@@ -146,6 +146,58 @@ export class ApiError extends Error {
 	}
 }
 
+// ── User-friendly error mapping ────────────────────────────────
+
+const ERROR_MESSAGES: Record<number, Record<string, string>> = {
+	401: {
+		unauthorized: 'Your session has expired — please log in again',
+		_default: 'Authentication required — please log in'
+	},
+	403: {
+		forbidden: "You don't have permission to perform this action",
+		_default: 'Access denied'
+	},
+	404: {
+		_default: 'The requested resource was not found'
+	},
+	409: {
+		conflict: 'This resource already exists',
+		_default: 'A conflict occurred — please try again'
+	},
+	413: {
+		_default: 'The file is too large to upload'
+	},
+	429: {
+		rate_limited: 'Too many requests — please wait a moment',
+		account_locked: 'Account temporarily locked — too many failed login attempts',
+		_default: 'Too many requests — please slow down'
+	},
+	500: {
+		_default: 'Something went wrong on our end — please try again'
+	},
+	503: {
+		_default: 'The service is temporarily unavailable — please try again later'
+	}
+};
+
+/** Map an ApiError to a user-friendly message. */
+export function friendlyError(err: unknown): string {
+	if (err instanceof ApiError) {
+		const statusMap = ERROR_MESSAGES[err.status];
+		if (statusMap) {
+			return statusMap[err.code] ?? statusMap._default ?? err.message;
+		}
+		return err.message;
+	}
+	if (err instanceof Error) {
+		if (err.message === 'Failed to fetch') {
+			return 'Unable to reach the server — check your connection';
+		}
+		return err.message;
+	}
+	return 'An unexpected error occurred';
+}
+
 // ── Fetch wrapper ──────────────────────────────────────────────
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -169,19 +221,38 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ── Authenticated fetch wrapper ─────────────────────────────────
 
-/** Injects Authorization: Bearer header. Used by newsroom endpoints. */
+/** Injects Authorization: Bearer header. Used by newsroom endpoints.
+ *  Automatically retries once with a refreshed token on 401. */
 export async function authRequest<T>(
 	path: string,
 	token: string,
 	options?: RequestInit
 ): Promise<T> {
-	return request<T>(path, {
-		...options,
-		headers: {
-			...options?.headers,
-			Authorization: `Bearer ${token}`
+	try {
+		return await request<T>(path, {
+			...options,
+			headers: {
+				...options?.headers,
+				Authorization: `Bearer ${token}`
+			}
+		});
+	} catch (err) {
+		if (err instanceof ApiError && err.status === 401) {
+			// Dynamically import to avoid circular dependency
+			const { refreshAccessToken } = await import('$lib/newsroom/auth');
+			const newToken = await refreshAccessToken();
+			if (newToken) {
+				return request<T>(path, {
+					...options,
+					headers: {
+						...options?.headers,
+						Authorization: `Bearer ${newToken}`
+					}
+				});
+			}
 		}
-	});
+		throw err;
+	}
 }
 
 // ── Endpoints ──────────────────────────────────────────────────

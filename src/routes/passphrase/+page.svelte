@@ -5,6 +5,7 @@
 
 	let passphrase = $state(get(pendingPassphrase));
 	let confirmed = $state(false);
+	let writtenDown = $state(false);
 
 	// If no passphrase in store, redirect to home
 	if (!passphrase) {
@@ -24,6 +25,10 @@
 		} else {
 			goto('/');
 		}
+	}
+
+	function handlePrint() {
+		window.print();
 	}
 </script>
 
@@ -67,12 +72,24 @@
 
 		<!-- Passphrase grid -->
 		<div class="mb-6 p-5 rounded-lg bg-vault-surface border border-vault-border">
-			<div class="font-mono text-xs text-vault-text-muted uppercase tracking-wider mb-3">
-				Recovery Passphrase
+			<div class="flex items-center justify-between mb-3">
+				<div class="font-mono text-xs text-vault-text-muted uppercase tracking-wider">
+					Recovery Passphrase
+				</div>
+				<button
+					onclick={handlePrint}
+					class="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono text-vault-text-muted hover:text-vault-text border border-vault-border hover:border-vault-text-dim transition-colors print:hidden"
+					title="Print this page"
+				>
+					<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+					</svg>
+					Print
+				</button>
 			</div>
-			<div class="grid grid-cols-3 gap-2.5">
+			<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
 				{#each words as word, i}
-					<div class="flex items-center gap-2 bg-vault-bg rounded px-3 py-2">
+					<div class="flex items-center gap-2 bg-vault-bg rounded px-3 py-2.5 sm:py-2">
 						<span class="text-xs text-vault-text-dim font-mono w-4 text-right">{i + 1}.</span>
 						<span class="text-sm text-vault-text font-mono font-medium">{word}</span>
 					</div>
@@ -102,10 +119,23 @@
 			</ul>
 		</div>
 
+		<!-- Confirmation checkbox -->
+		<label class="flex items-start gap-3 mb-4 cursor-pointer group">
+			<input
+				type="checkbox"
+				bind:checked={writtenDown}
+				class="mt-0.5 w-4 h-4 rounded border-vault-border bg-vault-surface text-vault-green focus:ring-vault-green/50 focus:ring-2 cursor-pointer"
+			/>
+			<span class="text-sm text-vault-text-muted group-hover:text-vault-text transition-colors">
+				I have written down or printed this passphrase and stored it somewhere safe
+			</span>
+		</label>
+
 		<!-- Confirm button -->
 		<button
 			onclick={handleConfirm}
-			class="w-full flex items-center justify-center gap-2 bg-vault-green hover:bg-vault-green-dim text-black font-semibold py-3 px-4 rounded-lg transition-colors"
+			disabled={!writtenDown}
+			class="w-full flex items-center justify-center gap-2 bg-vault-green hover:bg-vault-green-dim text-black font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
 		>
 			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />

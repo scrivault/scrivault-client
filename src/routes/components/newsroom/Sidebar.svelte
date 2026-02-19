@@ -10,6 +10,7 @@
 	);
 	const isInvestigationsActive = $derived(currentPath.startsWith('/newsroom/investigations'));
 	const isTeamActive = $derived(currentPath.startsWith('/newsroom/team'));
+	const isSettingsActive = $derived(currentPath.startsWith('/newsroom/settings'));
 
 	const user = $derived($newsroomAuth.user);
 	const org = $derived($orgStore);
@@ -105,12 +106,21 @@
 					<p class="font-mono text-[10px] text-vault-text-dim uppercase">{user.role}</p>
 				</div>
 			</div>
-			<button
-				onclick={handleLogout}
-				class="text-[11px] text-vault-text-dim hover:text-vault-text transition-colors"
-			>
-				Sign out
-			</button>
+			<div class="flex items-center gap-2">
+				<a
+					href="/newsroom/settings"
+					class="text-[11px] transition-colors {isSettingsActive ? 'text-vault-text' : 'text-vault-text-dim hover:text-vault-text'}"
+				>
+					Settings
+				</a>
+				<span class="text-vault-border">·</span>
+				<button
+					onclick={handleLogout}
+					class="text-[11px] text-vault-text-dim hover:text-vault-text transition-colors"
+				>
+					Sign out
+				</button>
+			</div>
 		</div>
 	{/if}
 </aside>

@@ -73,9 +73,10 @@
 	</thead>
 	<tbody>
 		{#each tips as tip (tip.id)}
+			{@const hasUnread = tip.unread_count > 0}
 			<tr
 				onclick={() => onRowClick(tip)}
-				class="border-b border-vault-border cursor-pointer transition-colors hover:bg-vault-surface"
+				class="border-b border-vault-border cursor-pointer transition-colors hover:bg-vault-surface {hasUnread ? 'font-medium' : ''}"
 			>
 				<td class="px-3 py-3.5 align-middle">
 					<StatusPill status={tip.status} />
@@ -109,6 +110,9 @@
 				</td>
 				<td class="px-3 py-3.5 align-middle">
 					<span class="font-mono text-[11px] text-vault-text-muted">{tip.message_count}</span>
+					{#if hasUnread}
+						<span class="ml-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-vault-amber text-[9px] font-mono font-bold text-vault-bg">{tip.unread_count}</span>
+					{/if}
 				</td>
 				<td class="px-3 py-3.5 align-middle">
 					<span class="font-mono text-[11px] text-vault-text-muted">{tip.document_count}</span>

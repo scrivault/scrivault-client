@@ -35,7 +35,12 @@ import type {
 	TeamListResponse,
 	UpdateStatusRequest,
 	AssignThreadRequest,
-	ThreadDetailResponse
+	ThreadDetailResponse,
+	ThreadNote,
+	ThreadNoteListResponse,
+	CreateThreadNoteRequest,
+	ChangePasswordRequest,
+	ChangePasswordResponse
 } from './types';
 
 const BASE = '/api';
@@ -247,6 +252,76 @@ export const newsroomApi = {
 	/** List all team members. */
 	getTeamMembers(): Promise<TeamListResponse> {
 		return authRequest<TeamListResponse>('/newsroom/team', requireToken());
+	},
+
+	// Read receipts (protected)
+
+	/** Mark a thread as read for the current journalist. */
+	markRead(threadId: string): Promise<{ status: string }> {
+		return authRequest<{ status: string }>(
+			`/newsroom/tips/${encodeURIComponent(threadId)}/read`,
+			requireToken(),
+			{ method: 'POST' }
+		);
+	},
+
+	// Thread notes (protected)
+
+	/** Create an encrypted thread note. */
+	createNote(threadId: string, req: CreateThreadNoteRequest): Promise<ThreadNote> {
+		return authRequest<ThreadNote>(
+			`/newsroom/tips/${encodeURIComponent(threadId)}/notes`,
+			requireToken(),
+			{ method: 'POST', body: JSON.stringify(req) }
+		);
+	},
+
+	/** List notes for a thread. */
+	getNotes(threadId: string): Promise<ThreadNoteListResponse> {
+		return authRequest<ThreadNoteListResponse>(
+			`/newsroom/tips/${encodeURIComponent(threadId)}/notes`,
+			requireToken()
+		);
+	},
+
+	/** Delete a thread note by ID. */
+	async deleteNote(threadId: string, noteId: string): Promise<void> {
+		const token = requireToken();
+		const res = await fetch(`${BASE}/newsroom/tips/${encodeURIComponent(threadId)}/notes/${encodeURIComponent(noteId)}`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		if (!res.ok) {
+			let code = 'unknown';
+			let message = 'Failed to delete note';
+			try {
+				const body = await res.json();
+				code = body.code ?? code;
+				message = body.error ?? message;
+			} catch { /* Non-JSON error body */ }
+			throw new ApiError(res.status, code, message);
+		}
+	},
+
+	// Team deactivation (protected, editor-only)
+
+	/** Deactivate a team member. Revokes all key grants. */
+	deactivateTeamMember(journalistId: string): Promise<{ status: string }> {
+		return authRequest<{ status: string }>(
+			`/newsroom/team/${encodeURIComponent(journalistId)}/deactivate`,
+			requireToken(),
+			{ method: 'PATCH' }
+		);
+	},
+
+	// Account management (protected)
+
+	/** Change password and re-encrypt private key. */
+	changePassword(req: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+		return authRequest<ChangePasswordResponse>('/newsroom/account/password', requireToken(), {
+			method: 'PATCH',
+			body: JSON.stringify(req)
+		});
 	},
 
 	/** Revoke an invite by ID. Returns 204 No Content on success. */

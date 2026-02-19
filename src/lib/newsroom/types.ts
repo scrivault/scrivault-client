@@ -12,9 +12,13 @@ export interface LoginRequest {
 
 export interface LoginResponse {
 	token: string;
+	refresh_token?: string;
 	journalist_id: string;
+	email: string;
+	display_name: string;
 	role: 'editor' | 'reporter';
 	expires_at: string;
+	refresh_expires_at?: string;
 	encrypted_private_key?: string; // base64
 	private_key_nonce?: string; // base64
 	key_salt?: string; // base64
@@ -52,6 +56,7 @@ export interface TipSummary {
 	assignee_name: string | null;
 	message_count: number;
 	document_count: number;
+	unread_count: number;
 	last_activity: string;
 	created_at: string;
 }
@@ -236,6 +241,40 @@ export interface ThreadDetailResponse {
 	assigned_to?: string;
 	assigned_at?: string;
 	updated_at: string;
+}
+
+// ── Thread notes ─────────────────────────────────────────
+
+export interface ThreadNote {
+	id: string;
+	thread_id: string;
+	journalist_id: string;
+	ciphertext: string; // base64
+	nonce: string; // base64
+	created_at: string;
+}
+
+export interface ThreadNoteListResponse {
+	notes: ThreadNote[];
+}
+
+export interface CreateThreadNoteRequest {
+	ciphertext: string; // base64
+	nonce: string; // base64
+}
+
+// ── Account management ──────────────────────────────────
+
+export interface ChangePasswordRequest {
+	current_password: string;
+	new_password: string;
+	encrypted_private_key: string; // base64
+	private_key_nonce: string; // base64
+	key_salt: string; // base64
+}
+
+export interface ChangePasswordResponse {
+	message: string;
 }
 
 // ── Tip filter params ────────────────────────────────────

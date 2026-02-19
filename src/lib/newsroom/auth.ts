@@ -32,8 +32,10 @@ export interface AuthState {
  */
 interface PersistedSession {
 	token: string;
+	refreshToken: string | null;
 	user: NewsroomUser;
 	expiresAt: number;
+	refreshExpiresAt: number | null;
 	encryptedPrivateKey: string | null; // base64
 	privateKeyNonce: string | null; // base64
 	keySalt: string | null; // base64
@@ -78,12 +80,16 @@ export function persistSession(
 	encryptedPrivateKey: string | null,
 	privateKeyNonce: string | null,
 	keySalt: string | null,
+	refreshToken: string | null = null,
+	refreshExpiresAt: number | null = null,
 ): void {
 	try {
 		const data: PersistedSession = {
 			token,
+			refreshToken,
 			user,
 			expiresAt,
+			refreshExpiresAt,
 			encryptedPrivateKey,
 			privateKeyNonce,
 			keySalt,
@@ -143,4 +149,57 @@ export function isAuthenticated(): boolean {
 export function getToken(): string | null {
 	if (!isAuthenticated()) return null;
 	return get(newsroomAuth).token;
+}
+
+/** Get the stored refresh token (from sessionStorage). */
+export function getRefreshToken(): string | null {
+	try {
+		const raw = sessionStorage.getItem(SESSION_KEY);
+		if (!raw) return null;
+		const data: PersistedSession = JSON.parse(raw);
+		if (!data.refreshToken || !data.refreshExpiresAt) return null;
+		if (Date.now() >= data.refreshExpiresAt) return null;
+		return data.refreshToken;
+	} catch {
+		return null;
+	}
+}
+
+/** Attempt to refresh the access token using the stored refresh token. */
+export async function refreshAccessToken(): Promise<string | null> {
+	const refreshToken = getRefreshToken();
+	if (!refreshToken) return null;
+
+	try {
+		const res = await fetch('/api/newsroom/refresh', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ refresh_token: refreshToken })
+		});
+		if (!res.ok) return null;
+
+		const body = await res.json();
+		const state = get(newsroomAuth);
+		if (!state.user) return null;
+
+		// Update token in store
+		setAuth(body.token, state.user, body.expires_at, state.privateKey, state.publicKey);
+
+		// Re-persist with new tokens
+		const persisted = getPersistedSession();
+		persistSession(
+			body.token,
+			state.user,
+			new Date(body.expires_at).getTime(),
+			persisted?.encryptedPrivateKey ?? null,
+			persisted?.privateKeyNonce ?? null,
+			persisted?.keySalt ?? null,
+			body.refresh_token,
+			body.refresh_expires_at ? new Date(body.refresh_expires_at).getTime() : null,
+		);
+
+		return body.token;
+	} catch {
+		return null;
+	}
 }

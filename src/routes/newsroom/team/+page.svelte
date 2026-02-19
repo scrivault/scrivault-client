@@ -21,6 +21,7 @@
 	// Tokens from invites created in this session (the list endpoint doesn't return tokens)
 	let tokenMap = $state<Record<string, string>>({});
 	let copiedId = $state<string | null>(null);
+	let deactivatingId = $state<string | null>(null);
 
 	const user = $derived($newsroomAuth.user);
 	const isEditor = $derived(user?.role === 'editor');
@@ -130,6 +131,19 @@
 		}, 2000);
 	}
 
+	async function handleDeactivate(member: TeamMember) {
+		if (!confirm(`Deactivate ${member.display_name}? This will revoke all their decryption keys.`)) return;
+		deactivatingId = member.id;
+		try {
+			await newsroomApi.deactivateTeamMember(member.id);
+			await loadTeamMembers();
+		} catch {
+			// Ignore
+		} finally {
+			deactivatingId = null;
+		}
+	}
+
 	onMount(() => {
 		loadTeamMembers();
 		loadInvites();
@@ -212,11 +226,11 @@
 								</span>
 								{#if isEditor && !isMe}
 									<button
-										disabled
-										class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-red/60 bg-vault-surface-raised border border-vault-border cursor-not-allowed opacity-50"
-										title="Coming soon"
+										onclick={() => handleDeactivate(member)}
+										disabled={deactivatingId === member.id}
+										class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-red bg-vault-red-muted border border-vault-red/30 hover:bg-vault-red/20 transition-colors disabled:opacity-50"
 									>
-										Remove
+										{deactivatingId === member.id ? 'Deactivating…' : 'Deactivate'}
 									</button>
 								{/if}
 							</div>

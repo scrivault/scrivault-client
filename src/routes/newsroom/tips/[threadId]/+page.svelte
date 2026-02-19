@@ -11,10 +11,11 @@
 		fromBase64,
 		toBase64
 	} from '$lib/crypto';
-	import { ApiError } from '$lib/api';
+	import { ApiError, api } from '$lib/api';
+	import type { ProvenanceEntry } from '$lib/api';
 	import { getToken } from '$lib/newsroom/auth';
 	import { createWsConnection, newsroomWsUrl } from '$lib/ws';
-	import type { NewsroomMessage, TipStatus, TeamMember } from '$lib/newsroom/types';
+	import type { NewsroomMessage, TipStatus, TeamMember, ThreadNote } from '$lib/newsroom/types';
 	import MessageBubble from '../../../components/newsroom/MessageBubble.svelte';
 	import StatusPill from '../../../components/newsroom/StatusPill.svelte';
 
@@ -54,6 +55,19 @@
 	let investigationCodename = $state('');
 	let creatingInvestigation = $state(false);
 
+	// Notes state
+	let notes: ThreadNote[] = $state([]);
+	let showNotes = $state(false);
+	let newNoteText = $state('');
+	let savingNote = $state(false);
+
+	// Export state
+	let showExportModal = $state(false);
+	let exportFormat: 'text' | 'json' = $state('text');
+	let exportIncludeProvenance = $state(true);
+	let exporting = $state(false);
+	let exportError = $state('');
+
 	// Scroll anchor for auto-scrolling to latest message
 	let scrollAnchor: HTMLDivElement | undefined = $state();
 
@@ -87,6 +101,62 @@
 
 	const statuses: TipStatus[] = ['new', 'review', 'active', 'closed'];
 
+	async function loadNotes() {
+		try {
+			const res = await newsroomApi.getNotes(threadId);
+			notes = res.notes ?? [];
+		} catch {
+			// Non-critical
+		}
+	}
+
+	async function handleSaveNote() {
+		if (!newNoteText.trim() || !threadKey) return;
+		savingNote = true;
+		try {
+			const encrypted = await encryptMessage(newNoteText.trim(), threadKey);
+			await newsroomApi.createNote(threadId, {
+				ciphertext: toBase64(encrypted.ciphertext),
+				nonce: toBase64(encrypted.nonce)
+			});
+			newNoteText = '';
+			await loadNotes();
+		} catch {
+			// Silently fail
+		} finally {
+			savingNote = false;
+		}
+	}
+
+	async function handleDeleteNote(noteId: string) {
+		try {
+			await newsroomApi.deleteNote(threadId, noteId);
+			notes = notes.filter((n) => n.id !== noteId);
+		} catch {
+			// Silently fail
+		}
+	}
+
+	async function decryptNoteText(note: ThreadNote): Promise<string> {
+		if (!threadKey) return '[encrypted]';
+		try {
+			return await decryptMessage(fromBase64(note.ciphertext), fromBase64(note.nonce), threadKey);
+		} catch {
+			return '[decryption failed]';
+		}
+	}
+
+	let decryptedNotes: Map<string, string> = $state(new Map());
+
+	async function decryptAllNotes() {
+		if (!threadKey) return;
+		const newMap = new Map<string, string>();
+		for (const note of notes) {
+			newMap.set(note.id, await decryptNoteText(note));
+		}
+		decryptedNotes = newMap;
+	}
+
 	async function loadThread() {
 		loading = true;
 		error = '';
@@ -108,8 +178,15 @@
 				// Non-critical — status controls just won't have initial data
 			}
 
+			// Mark thread as read
+			newsroomApi.markRead(threadId).catch(() => {});
+
 			// Attempt to unseal the thread key and decrypt messages
 			await attemptDecryption();
+
+			// Load internal notes
+			await loadNotes();
+			await decryptAllNotes();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load thread.';
 		} finally {
@@ -296,6 +373,173 @@
 		} catch (err) {
 			updateError = err instanceof Error ? err.message : 'Failed to create investigation.';
 			creatingInvestigation = false;
+		}
+	}
+
+	// ── Export for publication ────────────────────────────────
+
+	function openExportModal() {
+		exportFormat = 'text';
+		exportIncludeProvenance = true;
+		exportError = '';
+		showExportModal = true;
+	}
+
+	async function handleExport() {
+		if (!canDecrypt || decryptedTexts.size === 0) return;
+		exporting = true;
+		exportError = '';
+
+		try {
+			// Collect provenance chain if requested
+			let provenance: ProvenanceEntry[] = [];
+			if (exportIncludeProvenance) {
+				try {
+					const provRes = await api.getProvenance(threadId);
+					provenance = provRes.entries ?? [];
+				} catch {
+					// Non-critical — export without provenance
+				}
+			}
+
+			const exportData = buildExportData(provenance);
+			let content: string;
+			let filename: string;
+			let mimeType: string;
+
+			if (exportFormat === 'json') {
+				content = JSON.stringify(exportData, null, 2);
+				filename = `scrivault-thread-${shortId}-export.json`;
+				mimeType = 'application/json';
+			} else {
+				content = buildPlainTextExport(exportData);
+				filename = `scrivault-thread-${shortId}-export.txt`;
+				mimeType = 'text/plain';
+			}
+
+			// Trigger download
+			const blob = new Blob([content], { type: mimeType });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+
+			showExportModal = false;
+		} catch (err) {
+			exportError = err instanceof Error ? err.message : 'Export failed.';
+		} finally {
+			exporting = false;
+		}
+	}
+
+	interface ExportMessage {
+		sender: string;
+		timestamp: string;
+		content: string;
+	}
+
+	interface ExportData {
+		thread_id: string;
+		exported_at: string;
+		exported_by: string;
+		status: TipStatus;
+		assigned_to: string | null;
+		message_count: number;
+		messages: ExportMessage[];
+		provenance?: ProvenanceEntry[];
+	}
+
+	function buildExportData(provenance: ProvenanceEntry[]): ExportData {
+		const exportMessages: ExportMessage[] = messages.map((msg) => ({
+			sender: msg.sender_role === 'source' ? 'Source' : (user?.display_name ?? 'Journalist'),
+			timestamp: msg.created_at,
+			content: decryptedTexts.get(msg.id) ?? '[unable to decrypt]'
+		}));
+
+		const data: ExportData = {
+			thread_id: threadId,
+			exported_at: new Date().toISOString(),
+			exported_by: user?.display_name ?? 'Unknown',
+			status: tipStatus,
+			assigned_to: assigneeName,
+			message_count: exportMessages.length,
+			messages: exportMessages
+		};
+
+		if (provenance.length > 0) {
+			data.provenance = provenance;
+		}
+
+		return data;
+	}
+
+	function buildPlainTextExport(data: ExportData): string {
+		const lines: string[] = [];
+		const divider = '─'.repeat(60);
+
+		lines.push('SCRIVAULT — THREAD EXPORT');
+		lines.push(divider);
+		lines.push(`Thread ID:    ${data.thread_id}`);
+		lines.push(`Status:       ${data.status}`);
+		if (data.assigned_to) {
+			lines.push(`Assigned to:  ${data.assigned_to}`);
+		}
+		lines.push(`Exported by:  ${data.exported_by}`);
+		lines.push(`Exported at:  ${formatTimestamp(data.exported_at)}`);
+		lines.push(`Messages:     ${data.message_count}`);
+		lines.push(divider);
+		lines.push('');
+
+		lines.push('MESSAGES');
+		lines.push(divider);
+
+		for (const msg of data.messages) {
+			lines.push(`[${formatTimestamp(msg.timestamp)}] ${msg.sender}:`);
+			lines.push(msg.content);
+			lines.push('');
+		}
+
+		if (data.provenance && data.provenance.length > 0) {
+			lines.push(divider);
+			lines.push('PROVENANCE CHAIN');
+			lines.push(divider);
+			lines.push('');
+
+			for (const entry of data.provenance) {
+				lines.push(`#${entry.sequence_num}  ${entry.event_type}`);
+				lines.push(`  Time: ${formatTimestamp(entry.created_at)}`);
+				lines.push(`  Hash: ${entry.entry_hash}`);
+				lines.push(`  Prev: ${entry.prev_hash}`);
+				lines.push('');
+			}
+		}
+
+		lines.push(divider);
+		lines.push('End of export');
+		lines.push('');
+		lines.push('This export was generated from an end-to-end encrypted conversation.');
+		lines.push('Provenance hashes provide a tamper-evident chain of custody.');
+
+		return lines.join('\n');
+	}
+
+	function formatTimestamp(iso: string): string {
+		try {
+			return new Date(iso).toLocaleString('en-US', {
+				year: 'numeric',
+				month: 'short',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit',
+				second: '2-digit',
+				hour12: false
+			});
+		} catch {
+			return iso;
 		}
 	}
 
@@ -492,16 +736,31 @@
 				</button>
 			{/if}
 
-			<!-- Promote — stays prominent -->
+			<!-- Export + Promote — right side -->
+		<div class="ml-auto flex items-center gap-2">
+			{#if canDecrypt && decryptedTexts.size > 0}
+				<button
+					onclick={openExportModal}
+					class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-text-dim hover:text-vault-text bg-vault-surface-raised border border-vault-border transition-colors"
+				>
+					<span class="inline-flex items-center gap-1">
+						<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+						</svg>
+						Export
+					</span>
+				</button>
+			{/if}
 			{#if isEditor}
 				<button
 					onclick={openInvestigationModal}
 					disabled={updating}
-					class="ml-auto px-2.5 py-1 rounded text-[10px] font-mono text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
+					class="px-2.5 py-1 rounded text-[10px] font-mono text-vault-green hover:text-vault-green-dim bg-vault-green-muted border border-vault-green/20 transition-colors disabled:opacity-30"
 				>
 					Create Investigation
 				</button>
 			{/if}
+		</div>
 		</div>
 
 		{#if updateError}
@@ -538,6 +797,66 @@
 		{/if}
 		<div bind:this={scrollAnchor}></div>
 	</div>
+
+	<!-- Internal Notes toggle -->
+	{#if canDecrypt}
+		<div class="shrink-0 border-t border-vault-border">
+			<button
+				onclick={() => { showNotes = !showNotes; }}
+				class="w-full flex items-center justify-between px-6 py-2 text-left hover:bg-vault-surface-raised/50 transition-colors"
+			>
+				<span class="font-mono text-[10px] tracking-wider uppercase text-vault-text-dim">
+					Internal Notes {notes.length > 0 ? `(${notes.length})` : ''}
+				</span>
+				<svg class="w-3 h-3 text-vault-text-dim transition-transform {showNotes ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+				</svg>
+			</button>
+
+			{#if showNotes}
+				<div class="px-6 pb-3 space-y-2 max-h-48 overflow-y-auto">
+					{#each notes as note (note.id)}
+						<div class="flex items-start gap-2 px-3 py-2 rounded bg-vault-surface-raised border border-vault-border">
+							<p class="flex-1 text-xs text-vault-text whitespace-pre-wrap">{decryptedNotes.get(note.id) ?? '[encrypted]'}</p>
+							{#if note.journalist_id === user?.journalist_id}
+								<button
+									onclick={() => handleDeleteNote(note.id)}
+									class="shrink-0 text-[10px] text-vault-text-dim hover:text-vault-red transition-colors"
+									title="Delete note"
+								>
+									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+									</svg>
+								</button>
+							{/if}
+						</div>
+					{/each}
+					{#if notes.length === 0}
+						<p class="text-[11px] text-vault-text-dim py-1">No notes yet.</p>
+					{/if}
+					<form
+						onsubmit={(e) => { e.preventDefault(); handleSaveNote(); }}
+						class="flex gap-2 mt-1"
+					>
+						<input
+							type="text"
+							bind:value={newNoteText}
+							placeholder="Add an internal note…"
+							disabled={savingNote}
+							class="flex-1 bg-vault-bg border border-vault-border rounded px-2.5 py-1.5 text-xs text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors disabled:opacity-50"
+						/>
+						<button
+							type="submit"
+							disabled={!newNoteText.trim() || savingNote}
+							class="px-2.5 py-1.5 rounded text-[10px] font-mono bg-vault-surface-raised border border-vault-border text-vault-text-muted hover:text-vault-text transition-colors disabled:opacity-30"
+						>
+							{savingNote ? '…' : 'Add'}
+						</button>
+					</form>
+				</div>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Reply area -->
 	<div class="shrink-0 px-6 py-3 border-t border-vault-border bg-vault-surface/80 backdrop-blur-sm">
@@ -716,6 +1035,101 @@
 					</button>
 				</div>
 			</form>
+		</div>
+	</div>
+{/if}
+
+<!-- Export modal -->
+{#if showExportModal}
+	<!-- svelte-ignore a11y_interactive_supports_focus -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+		onclick={(e) => { if (e.target === e.currentTarget) showExportModal = false; }}
+		onkeydown={(e) => { if (e.key === 'Escape') showExportModal = false; }}
+		role="dialog"
+		aria-modal="true"
+		aria-label="Export thread"
+	>
+		<div class="w-full max-w-sm mx-4 rounded-lg bg-vault-surface border border-vault-border shadow-2xl">
+			<div class="px-4 py-3 border-b border-vault-border">
+				<h3 class="font-mono text-xs text-vault-text">Export for Publication</h3>
+			</div>
+			<div class="p-4 space-y-4">
+				<p class="text-xs text-vault-text-muted">
+					Export decrypted thread content for publication review or legal proceedings.
+				</p>
+
+				<!-- Format selection -->
+				<div>
+					<span class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-2">
+						Format
+					</span>
+					<div class="flex gap-2">
+						<button
+							onclick={() => { exportFormat = 'text'; }}
+							class="flex-1 px-3 py-2 rounded text-xs font-mono transition-colors
+								{exportFormat === 'text'
+								? 'bg-vault-surface-raised text-vault-text border border-vault-green/40'
+								: 'bg-vault-bg text-vault-text-dim border border-vault-border hover:text-vault-text-muted'}"
+						>
+							Plain Text
+						</button>
+						<button
+							onclick={() => { exportFormat = 'json'; }}
+							class="flex-1 px-3 py-2 rounded text-xs font-mono transition-colors
+								{exportFormat === 'json'
+								? 'bg-vault-surface-raised text-vault-text border border-vault-green/40'
+								: 'bg-vault-bg text-vault-text-dim border border-vault-border hover:text-vault-text-muted'}"
+						>
+							JSON
+						</button>
+					</div>
+				</div>
+
+				<!-- Options -->
+				<label class="flex items-center gap-2 cursor-pointer">
+					<input
+						type="checkbox"
+						bind:checked={exportIncludeProvenance}
+						class="w-3.5 h-3.5 rounded border-vault-border text-vault-green focus:ring-vault-green/50"
+					/>
+					<span class="text-xs text-vault-text-muted">Include provenance chain</span>
+				</label>
+
+				<!-- Summary -->
+				<div class="px-3 py-2 rounded bg-vault-bg border border-vault-border-subtle">
+					<div class="flex items-center justify-between text-[10px] font-mono text-vault-text-dim">
+						<span>{decryptedTexts.size} messages</span>
+						<span>{exportFormat === 'text' ? '.txt' : '.json'}</span>
+					</div>
+				</div>
+
+				{#if exportError}
+					<p class="text-[10px] text-vault-red">{exportError}</p>
+				{/if}
+
+				<!-- Actions -->
+				<div class="flex gap-2">
+					<button
+						type="button"
+						onclick={() => { showExportModal = false; }}
+						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
+					>
+						Cancel
+					</button>
+					<button
+						onclick={handleExport}
+						disabled={exporting}
+						class="flex-1 px-3 py-2 rounded text-[11px] font-mono text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+					>
+						{#if exporting}
+							Exporting…
+						{:else}
+							Download
+						{/if}
+					</button>
+				</div>
+			</div>
 		</div>
 	</div>
 {/if}

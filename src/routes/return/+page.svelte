@@ -126,9 +126,9 @@
 				<div class="font-mono text-xs text-vault-text-muted uppercase tracking-wider mb-3">
 					Recovery Passphrase
 				</div>
-				<div class="grid grid-cols-3 gap-2.5">
+				<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-2.5">
 					{#each passphraseWords as word, i}
-						<div class="flex items-center gap-1.5 bg-vault-bg rounded px-2 py-1.5 border border-vault-border-subtle focus-within:border-vault-green/50 transition-colors">
+						<div class="flex items-center gap-1.5 bg-vault-bg rounded px-2 py-2.5 sm:py-1.5 border border-vault-border-subtle focus-within:border-vault-green/50 transition-colors">
 							<span class="text-xs text-vault-text-dim font-mono w-4 text-right shrink-0">{i + 1}.</span>
 							<input
 								id={`word-${i}`}

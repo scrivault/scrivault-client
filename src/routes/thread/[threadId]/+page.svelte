@@ -495,7 +495,7 @@
 						{@const msg = item.data}
 						{@const isSource = msg.senderRole === 'source'}
 						<div class="flex {isSource ? 'justify-start' : 'justify-end'}">
-							<div class="max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-4 py-2.5">
+							<div class="max-w-[90%] sm:max-w-[80%] {isSource ? 'bg-vault-surface border border-vault-border' : 'bg-vault-green-muted border border-vault-green/20'} rounded-lg px-3 sm:px-4 py-2.5">
 								{#if !sameSender}
 									<div class="flex items-center gap-2 mb-1">
 										<span class="font-mono text-[10px] uppercase tracking-wider {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
