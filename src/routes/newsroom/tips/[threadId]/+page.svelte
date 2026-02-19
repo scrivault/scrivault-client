@@ -13,6 +13,7 @@
 		toBase64
 	} from '$lib/crypto';
 	import { ApiError, api } from '$lib/api';
+	import { jsPDF } from 'jspdf';
 	import JSZip from 'jszip';
 	import type { ProvenanceEntry } from '$lib/api';
 	import { getToken } from '$lib/newsroom/auth';
@@ -96,10 +97,9 @@
 
 	// Export state
 	let showExportModal = $state(false);
-	let exportFormat: 'text' | 'json' = $state('text');
-	let exportIncludeProvenance = $state(true);
 	let exporting = $state(false);
 	let exportError = $state('');
+	let orgName = $state('');
 
 	// Scroll anchor for auto-scrolling to latest message
 	let scrollAnchor: HTMLDivElement | undefined = $state();
@@ -545,265 +545,18 @@
 
 	// ── Export for publication ────────────────────────────────
 
-	function openExportModal() {
-		exportFormat = 'text';
-		exportIncludeProvenance = true;
+	async function openExportModal() {
 		exportError = '';
 		showExportModal = true;
-	}
-
-	async function handleExport() {
-		if (!canDecrypt || decryptedTexts.size === 0) return;
-		exporting = true;
-		exportError = '';
-
-		try {
-			// Collect provenance chain if requested
-			let provenance: ProvenanceEntry[] = [];
-			if (exportIncludeProvenance) {
-				try {
-					const provRes = await api.getProvenance(threadId);
-					provenance = provRes.entries ?? [];
-				} catch {
-					// Non-critical — export without provenance
-				}
-			}
-
-			const exportData = buildExportData(provenance);
-			let content: string;
-			let filename: string;
-			let mimeType: string;
-
-			if (exportFormat === 'json') {
-				content = JSON.stringify(exportData, null, 2);
-				filename = `scrivault-thread-${shortId}-export.json`;
-				mimeType = 'application/json';
-			} else {
-				content = buildPlainTextExport(exportData);
-				filename = `scrivault-thread-${shortId}-export.txt`;
-				mimeType = 'text/plain';
-			}
-
-			// Trigger download
-			const blob = new Blob([content], { type: mimeType });
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = filename;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-
-			showExportModal = false;
-		} catch (err) {
-			exportError = err instanceof Error ? err.message : 'Export failed.';
-		} finally {
-			exporting = false;
-		}
-	}
-
-	async function handleExportWithFiles() {
-		if (!canDecrypt || decryptedTexts.size === 0) return;
-		exporting = true;
-		exportError = '';
-
-		try {
-			// Collect provenance chain if requested
-			let provenance: ProvenanceEntry[] = [];
-			if (exportIncludeProvenance) {
-				try {
-					const provRes = await api.getProvenance(threadId);
-					provenance = provRes.entries ?? [];
-				} catch {
-					// Non-critical
-				}
-			}
-
-			const exportData = buildExportData(provenance);
-			const zip = new JSZip();
-
-			// Add JSON manifest
-			zip.file('export.json', JSON.stringify(exportData, null, 2));
-
-			// Add plain text version
-			zip.file('export.txt', buildPlainTextExport(exportData));
-
-			// Add decrypted files
-			for (const rawDoc of threadDocuments) {
-				const decDoc = decryptedDocs.get(rawDoc.id);
-				if (!decDoc) continue;
-
-				// Ensure the document is decrypted (fetch if needed)
-				let blobUrl = decDoc.blobUrl;
-				if (!blobUrl && threadKey) {
-					try {
-						await fetchAndDecryptDocument(rawDoc.id);
-						blobUrl = decryptedDocs.get(rawDoc.id)?.blobUrl ?? null;
-					} catch {
-						continue; // Skip files that fail to decrypt
-					}
-				}
-
-				if (blobUrl) {
-					try {
-						const response = await fetch(blobUrl);
-						const blob = await response.blob();
-						const arrayBuffer = await blob.arrayBuffer();
-						zip.file(`files/${decDoc.fileName}`, arrayBuffer);
-					} catch {
-						// Skip files that fail to read
-					}
-				}
-			}
-
-			// Generate zip and trigger download
-			const zipBlob = await zip.generateAsync({ type: 'blob' });
-			const url = URL.createObjectURL(zipBlob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `scrivault-thread-${shortId}-export.zip`;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-
-			showExportModal = false;
-		} catch (err) {
-			exportError = err instanceof Error ? err.message : 'Export failed.';
-		} finally {
-			exporting = false;
-		}
-	}
-
-	interface ExportMessage {
-		sender: string;
-		timestamp: string;
-		content: string;
-	}
-
-	interface ExportDocument {
-		filename: string;
-		size: number;
-		mime_type: string;
-		sha256_hash: string;
-	}
-
-	interface ExportData {
-		thread_id: string;
-		exported_at: string;
-		exported_by: string;
-		status: TipStatus;
-		assigned_to: string | null;
-		message_count: number;
-		messages: ExportMessage[];
-		document_count: number;
-		documents: ExportDocument[];
-		provenance?: ProvenanceEntry[];
-	}
-
-	function buildExportData(provenance: ProvenanceEntry[]): ExportData {
-		const exportMessages: ExportMessage[] = messages.map((msg) => ({
-			sender: msg.sender_role === 'source' ? 'Sender' : (msg.sender_display_name || 'Responder'),
-			timestamp: msg.created_at,
-			content: decryptedTexts.get(msg.id) ?? '[unable to decrypt]'
-		}));
-
-		// Build documents array from decrypted docs + raw metadata (for hashes)
-		const exportDocuments: ExportDocument[] = [];
-		for (const rawDoc of threadDocuments) {
-			const decDoc = decryptedDocs.get(rawDoc.id);
-			exportDocuments.push({
-				filename: decDoc?.fileName ?? `document-${rawDoc.id.slice(0, 8)}`,
-				size: rawDoc.file_size,
-				mime_type: decDoc?.mimeType ?? 'application/octet-stream',
-				sha256_hash: rawDoc.sha256_hash
-			});
-		}
-
-		const data: ExportData = {
-			thread_id: threadId,
-			exported_at: new Date().toISOString(),
-			exported_by: user?.display_name ?? 'Unknown',
-			status: tipStatus,
-			assigned_to: assigneeName,
-			message_count: exportMessages.length,
-			messages: exportMessages,
-			document_count: exportDocuments.length,
-			documents: exportDocuments
-		};
-
-		if (provenance.length > 0) {
-			data.provenance = provenance;
-		}
-
-		return data;
-	}
-
-	function buildPlainTextExport(data: ExportData): string {
-		const lines: string[] = [];
-		const divider = '─'.repeat(60);
-
-		lines.push('SCRIVAULT — THREAD EXPORT');
-		lines.push(divider);
-		lines.push(`Thread ID:    ${data.thread_id}`);
-		lines.push(`Status:       ${data.status}`);
-		if (data.assigned_to) {
-			lines.push(`Assigned to:  ${data.assigned_to}`);
-		}
-		lines.push(`Exported by:  ${data.exported_by}`);
-		lines.push(`Exported at:  ${formatTimestamp(data.exported_at)}`);
-		lines.push(`Messages:     ${data.message_count}`);
-		lines.push(`Documents:    ${data.document_count}`);
-		lines.push(divider);
-		lines.push('');
-
-		lines.push('MESSAGES');
-		lines.push(divider);
-
-		for (const msg of data.messages) {
-			lines.push(`[${formatTimestamp(msg.timestamp)}] ${msg.sender}:`);
-			lines.push(msg.content);
-			lines.push('');
-		}
-
-		if (data.documents.length > 0) {
-			lines.push(divider);
-			lines.push('DOCUMENTS');
-			lines.push(divider);
-			lines.push('');
-
-			for (const doc of data.documents) {
-				lines.push(`  File:     ${doc.filename}`);
-				lines.push(`  Size:     ${formatFileSize(doc.size)}`);
-				lines.push(`  Type:     ${doc.mime_type}`);
-				lines.push(`  SHA-256:  ${doc.sha256_hash}`);
-				lines.push('');
+		// Fetch org name for PDF branding
+		if (!orgName) {
+			try {
+				const info = await newsroomApi.getOrganization();
+				orgName = info.name;
+			} catch {
+				orgName = 'Scrivault';
 			}
 		}
-
-		if (data.provenance && data.provenance.length > 0) {
-			lines.push(divider);
-			lines.push('PROVENANCE CHAIN');
-			lines.push(divider);
-			lines.push('');
-
-			for (const entry of data.provenance) {
-				lines.push(`#${entry.sequence_num}  ${entry.event_type}`);
-				lines.push(`  Time: ${formatTimestamp(entry.created_at)}`);
-				lines.push(`  Hash: ${entry.entry_hash}`);
-				lines.push(`  Prev: ${entry.prev_hash}`);
-				lines.push('');
-			}
-		}
-
-		lines.push(divider);
-		lines.push('End of export');
-		lines.push('');
-		lines.push('This export was generated from an end-to-end encrypted conversation.');
-		lines.push('Provenance hashes provide a tamper-evident chain of custody.');
-
-		return lines.join('\n');
 	}
 
 	function formatTimestamp(iso: string): string {
@@ -819,6 +572,371 @@
 			});
 		} catch {
 			return iso;
+		}
+	}
+
+	function formatDateShort(iso: string): string {
+		try {
+			return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+		} catch {
+			return iso;
+		}
+	}
+
+	function buildPdfReport(): jsPDF {
+		const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+		const pageW = pdf.internal.pageSize.getWidth();
+		const pageH = pdf.internal.pageSize.getHeight();
+		const marginL = 20;
+		const marginR = 20;
+		const contentW = pageW - marginL - marginR;
+		let y = 0;
+
+		// ── Colors ───────────────────────────────────
+		const green: [number, number, number] = [0, 200, 120];
+		const dark: [number, number, number] = [24, 28, 32];
+		const dimText: [number, number, number] = [120, 130, 140];
+		const bodyText: [number, number, number] = [40, 44, 50];
+		const lineColor: [number, number, number] = [55, 60, 70];
+		const senderBg: [number, number, number] = [34, 38, 44];
+		const responderBg: [number, number, number] = [20, 40, 30];
+
+		function ensureSpace(needed: number) {
+			if (y + needed > pageH - 20) {
+				pdf.addPage();
+				y = 20;
+			}
+		}
+
+		function drawLine() {
+			pdf.setDrawColor(...lineColor);
+			pdf.setLineWidth(0.2);
+			pdf.line(marginL, y, pageW - marginR, y);
+			y += 4;
+		}
+
+		// ── Header bar ──────────────────────────────
+		pdf.setFillColor(...dark);
+		pdf.rect(0, 0, pageW, 36, 'F');
+
+		// Green accent stripe
+		pdf.setFillColor(...green);
+		pdf.rect(0, 36, pageW, 1, 'F');
+
+		// Org name
+		pdf.setFont('helvetica', 'bold');
+		pdf.setFontSize(16);
+		pdf.setTextColor(255, 255, 255);
+		pdf.text(orgName || 'Scrivault', marginL, 16);
+
+		// Subtitle
+		pdf.setFont('helvetica', 'normal');
+		pdf.setFontSize(9);
+		pdf.setTextColor(...green);
+		pdf.text('CASE EXPORT REPORT', marginL, 24);
+
+		// Export date right-aligned
+		pdf.setFontSize(8);
+		pdf.setTextColor(...dimText);
+		pdf.text(formatTimestamp(new Date().toISOString()), pageW - marginR, 24, { align: 'right' });
+
+		y = 46;
+
+		// ── Case metadata ────────────────────────────
+		pdf.setFont('helvetica', 'bold');
+		pdf.setFontSize(9);
+		pdf.setTextColor(...green);
+		pdf.text('CASE DETAILS', marginL, y);
+		y += 6;
+
+		const metaFields: [string, string][] = [
+			['Case ID', threadId],
+			['Status', tipStatus.charAt(0).toUpperCase() + tipStatus.slice(1)],
+			['Assigned to', assigneeName ?? 'Unassigned'],
+			['Exported by', user?.display_name ?? 'Unknown'],
+			['Messages', String(messages.length)],
+			['Documents', String(threadDocuments.length)]
+		];
+
+		// Date range from messages
+		if (messages.length > 0) {
+			const first = messages[0].created_at;
+			const last = messages[messages.length - 1].created_at;
+			metaFields.push(['Date range', `${formatDateShort(first)} — ${formatDateShort(last)}`]);
+		}
+
+		pdf.setFontSize(8);
+		for (const [label, value] of metaFields) {
+			pdf.setFont('helvetica', 'normal');
+			pdf.setTextColor(...dimText);
+			pdf.text(label, marginL, y);
+			pdf.setFont('helvetica', 'bold');
+			pdf.setTextColor(...bodyText);
+			pdf.text(value, marginL + 32, y);
+			y += 5;
+		}
+
+		y += 4;
+		drawLine();
+
+		// ── Message timeline ────────────────────────
+		pdf.setFont('helvetica', 'bold');
+		pdf.setFontSize(9);
+		pdf.setTextColor(...green);
+		pdf.text('MESSAGE TIMELINE', marginL, y);
+		y += 7;
+
+		for (const msg of messages) {
+			const sender = msg.sender_role === 'source' ? 'Sender' : (msg.sender_display_name || 'Responder');
+			const text = decryptedTexts.get(msg.id) ?? '[unable to decrypt]';
+			const timestamp = formatTimestamp(msg.created_at);
+			const isSender = msg.sender_role === 'source';
+
+			// Wrap message text
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(8);
+			const wrappedLines = pdf.splitTextToSize(text, contentW - 10);
+			const blockHeight = 6 + wrappedLines.length * 3.5 + 4;
+
+			ensureSpace(blockHeight + 4);
+
+			// Message card background
+			const bgColor = isSender ? senderBg : responderBg;
+			pdf.setFillColor(...bgColor);
+			pdf.roundedRect(marginL, y - 1, contentW, blockHeight, 1.5, 1.5, 'F');
+
+			// Sender label + timestamp
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(7);
+			pdf.setTextColor(isSender ? 200 : green[0], isSender ? 200 : green[1], isSender ? 200 : green[2]);
+			pdf.text(sender, marginL + 4, y + 4);
+
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(6);
+			pdf.setTextColor(...dimText);
+			pdf.text(timestamp, pageW - marginR - 4, y + 4, { align: 'right' });
+
+			// Message body
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(8);
+			pdf.setTextColor(220, 220, 225);
+			pdf.text(wrappedLines, marginL + 4, y + 9);
+
+			y += blockHeight + 3;
+		}
+
+		y += 4;
+
+		// ── Attachments ─────────────────────────────
+		if (threadDocuments.length > 0) {
+			ensureSpace(20);
+			drawLine();
+
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(9);
+			pdf.setTextColor(...green);
+			pdf.text('ATTACHMENTS', marginL, y);
+			y += 7;
+
+			// Table header
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(7);
+			pdf.setTextColor(...dimText);
+			pdf.text('Filename', marginL, y);
+			pdf.text('Size', marginL + 80, y);
+			pdf.text('SHA-256', marginL + 100, y);
+			y += 4;
+
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(7);
+			pdf.setTextColor(...bodyText);
+
+			for (const rawDoc of threadDocuments) {
+				ensureSpace(6);
+				const decDoc = decryptedDocs.get(rawDoc.id);
+				const fname = decDoc?.fileName ?? `document-${rawDoc.id.slice(0, 8)}`;
+				const size = formatFileSize(rawDoc.file_size);
+				const hash = rawDoc.sha256_hash.slice(0, 16) + '...';
+
+				pdf.setTextColor(...bodyText);
+				pdf.text(fname.length > 40 ? fname.slice(0, 37) + '...' : fname, marginL, y);
+				pdf.text(size, marginL + 80, y);
+				pdf.setFont('courier', 'normal');
+				pdf.setFontSize(6);
+				pdf.text(hash, marginL + 100, y);
+				pdf.setFont('helvetica', 'normal');
+				pdf.setFontSize(7);
+				y += 5;
+			}
+
+			y += 4;
+		}
+
+		// ── Provenance chain ────────────────────────
+		let provenance: ProvenanceEntry[] | null = null;
+		// Provenance is fetched and stored by the caller before building PDF
+		// We'll add it via a separate pass — see below
+
+		return pdf;
+	}
+
+	async function addProvenanceToPdf(pdf: jsPDF): Promise<void> {
+		let provenance: ProvenanceEntry[] = [];
+		try {
+			const provRes = await api.getProvenance(threadId);
+			provenance = provRes.entries ?? [];
+		} catch {
+			return; // Skip if unavailable
+		}
+
+		if (provenance.length === 0) return;
+
+		const pageW = pdf.internal.pageSize.getWidth();
+		const pageH = pdf.internal.pageSize.getHeight();
+		const marginL = 20;
+		const marginR = 20;
+		const green: [number, number, number] = [0, 200, 120];
+		const dimText: [number, number, number] = [120, 130, 140];
+		const bodyText: [number, number, number] = [40, 44, 50];
+		const lineColor: [number, number, number] = [55, 60, 70];
+
+		// Start provenance on new page
+		pdf.addPage();
+		let y = 20;
+
+		pdf.setDrawColor(...lineColor);
+		pdf.setLineWidth(0.2);
+		pdf.line(marginL, y, pageW - marginR, y);
+		y += 6;
+
+		pdf.setFont('helvetica', 'bold');
+		pdf.setFontSize(9);
+		pdf.setTextColor(...green);
+		pdf.text('PROVENANCE CHAIN', marginL, y);
+		y += 4;
+
+		pdf.setFont('helvetica', 'normal');
+		pdf.setFontSize(6.5);
+		pdf.setTextColor(...dimText);
+		pdf.text('Tamper-evident audit trail. Each entry hash chains to the previous, forming an immutable record.', marginL, y);
+		y += 7;
+
+		for (const entry of provenance) {
+			if (y + 16 > pageH - 20) {
+				pdf.addPage();
+				y = 20;
+			}
+
+			pdf.setFont('helvetica', 'bold');
+			pdf.setFontSize(7);
+			pdf.setTextColor(...bodyText);
+			pdf.text(`#${entry.sequence_num}  ${entry.event_type}`, marginL, y);
+
+			pdf.setFont('helvetica', 'normal');
+			pdf.setFontSize(6);
+			pdf.setTextColor(...dimText);
+			pdf.text(formatTimestamp(entry.created_at), marginL + 60, y);
+			y += 4;
+
+			pdf.setFont('courier', 'normal');
+			pdf.setFontSize(5.5);
+			pdf.setTextColor(80, 90, 100);
+			pdf.text(`Hash: ${entry.entry_hash}`, marginL + 4, y);
+			y += 3;
+			pdf.text(`Prev: ${entry.prev_hash}`, marginL + 4, y);
+			y += 6;
+		}
+
+		// Footer
+		y += 4;
+		pdf.setDrawColor(...lineColor);
+		pdf.setLineWidth(0.2);
+		pdf.line(marginL, y, pageW - marginR, y);
+		y += 5;
+		pdf.setFont('helvetica', 'normal');
+		pdf.setFontSize(6);
+		pdf.setTextColor(...dimText);
+		pdf.text('This report was generated from an end-to-end encrypted conversation.', marginL, y);
+		y += 3;
+		pdf.text('Provenance hashes provide a tamper-evident chain of custody.', marginL, y);
+	}
+
+	function triggerDownload(blob: Blob, filename: string) {
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		document.body.appendChild(a);
+		a.click();
+		document.body.removeChild(a);
+		URL.revokeObjectURL(url);
+	}
+
+	async function handleExportPdf() {
+		if (!canDecrypt || decryptedTexts.size === 0) return;
+		exporting = true;
+		exportError = '';
+
+		try {
+			const pdf = buildPdfReport();
+			await addProvenanceToPdf(pdf);
+			const blob = pdf.output('blob');
+			triggerDownload(blob, `scrivault-case-${shortId}.pdf`);
+			showExportModal = false;
+		} catch (err) {
+			exportError = err instanceof Error ? err.message : 'Export failed.';
+		} finally {
+			exporting = false;
+		}
+	}
+
+	async function handleExportPdfWithFiles() {
+		if (!canDecrypt || decryptedTexts.size === 0) return;
+		exporting = true;
+		exportError = '';
+
+		try {
+			const pdf = buildPdfReport();
+			await addProvenanceToPdf(pdf);
+			const pdfBlob = pdf.output('blob');
+
+			const zip = new JSZip();
+			zip.file(`scrivault-case-${shortId}.pdf`, pdfBlob);
+
+			// Add decrypted files
+			for (const rawDoc of threadDocuments) {
+				const decDoc = decryptedDocs.get(rawDoc.id);
+				if (!decDoc) continue;
+
+				let blobUrl = decDoc.blobUrl;
+				if (!blobUrl && threadKey) {
+					try {
+						await fetchAndDecryptDocument(rawDoc.id);
+						blobUrl = decryptedDocs.get(rawDoc.id)?.blobUrl ?? null;
+					} catch {
+						continue;
+					}
+				}
+
+				if (blobUrl) {
+					try {
+						const response = await fetch(blobUrl);
+						const blob = await response.blob();
+						const arrayBuffer = await blob.arrayBuffer();
+						zip.file(`files/${decDoc.fileName}`, arrayBuffer);
+					} catch {
+						// Skip files that fail to read
+					}
+				}
+			}
+
+			const zipBlob = await zip.generateAsync({ type: 'blob' });
+			triggerDownload(zipBlob, `scrivault-case-${shortId}.zip`);
+			showExportModal = false;
+		} catch (err) {
+			exportError = err instanceof Error ? err.message : 'Export failed.';
+		} finally {
+			exporting = false;
 		}
 	}
 
@@ -1397,56 +1515,19 @@
 			</div>
 			<div class="p-4 space-y-4">
 				<p class="text-xs text-vault-text-muted">
-					Export decrypted thread content for publication review or legal proceedings.
+					Generate a PDF report with case details, messages, attachments, and provenance chain.
 				</p>
-
-				<!-- Format selection -->
-				<div>
-					<span class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-2">
-						Format
-					</span>
-					<div class="flex gap-2">
-						<button
-							onclick={() => { exportFormat = 'text'; }}
-							class="flex-1 px-3 py-2 rounded text-xs transition-colors
-								{exportFormat === 'text'
-								? 'bg-vault-surface-raised text-vault-text border border-vault-green/40'
-								: 'bg-vault-bg text-vault-text-dim border border-vault-border hover:text-vault-text-muted'}"
-						>
-							Plain Text
-						</button>
-						<button
-							onclick={() => { exportFormat = 'json'; }}
-							class="flex-1 px-3 py-2 rounded text-xs transition-colors
-								{exportFormat === 'json'
-								? 'bg-vault-surface-raised text-vault-text border border-vault-green/40'
-								: 'bg-vault-bg text-vault-text-dim border border-vault-border hover:text-vault-text-muted'}"
-						>
-							JSON
-						</button>
-					</div>
-				</div>
-
-				<!-- Options -->
-				<label class="flex items-center gap-2 cursor-pointer">
-					<input
-						type="checkbox"
-						bind:checked={exportIncludeProvenance}
-						class="w-3.5 h-3.5 rounded border-vault-border text-vault-green focus:ring-vault-green/50"
-					/>
-					<span class="text-xs text-vault-text-muted">Include provenance chain</span>
-				</label>
 
 				<!-- Summary -->
 				<div class="px-3 py-2 rounded bg-vault-bg border border-vault-border-subtle space-y-1.5">
 					<div class="flex items-center justify-between text-[10px] text-vault-text-dim">
 						<span>{decryptedTexts.size} messages</span>
-						<span>{exportFormat === 'text' ? '.txt' : '.json'}</span>
+						<span>.pdf</span>
 					</div>
 					{#if threadDocuments.length > 0}
 						<div class="flex items-center justify-between text-[10px] text-vault-text-dim">
-							<span>{threadDocuments.length} document{threadDocuments.length !== 1 ? 's' : ''}</span>
-							<span>included in metadata</span>
+							<span>{threadDocuments.length} attachment{threadDocuments.length !== 1 ? 's' : ''}</span>
+							<span>listed in report</span>
 						</div>
 					{/if}
 				</div>
@@ -1466,27 +1547,27 @@
 							Cancel
 						</button>
 						<button
-							onclick={handleExport}
+							onclick={handleExportPdf}
 							disabled={exporting}
 							class="flex-1 px-3 py-2 rounded text-[11px] text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
 						>
 							{#if exporting}
-								Exporting…
+								Generating…
 							{:else}
-								Download
+								Export PDF
 							{/if}
 						</button>
 					</div>
 					{#if threadDocuments.length > 0}
 						<button
-							onclick={handleExportWithFiles}
+							onclick={handleExportPdfWithFiles}
 							disabled={exporting}
 							class="w-full px-3 py-2 rounded text-[11px] text-vault-text bg-vault-surface-raised border border-vault-border hover:border-vault-green/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
 						>
 							{#if exporting}
-								Bundling files…
+								Bundling report + files…
 							{:else}
-								Download with files (.zip)
+								Export PDF + Files (.zip)
 							{/if}
 						</button>
 					{/if}
