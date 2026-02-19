@@ -4,6 +4,8 @@
 	import { newsroomAuth, clearAuth } from '$lib/newsroom/auth';
 	import { orgStore } from '$lib/newsroom/org';
 
+	let { mobileOpen = $bindable(false) }: { mobileOpen?: boolean } = $props();
+
 	const currentPath = $derived($page.url.pathname as string);
 	const isTipsActive = $derived(
 		currentPath === '/newsroom/tips' || currentPath.startsWith('/newsroom/tips/')
@@ -14,9 +16,6 @@
 
 	const user = $derived($newsroomAuth.user);
 	const org = $derived($orgStore);
-
-	// Mobile sidebar toggle
-	let mobileOpen = $state(false);
 
 	function initials(name: string): string {
 		return name
@@ -36,21 +35,6 @@
 		mobileOpen = false;
 	}
 </script>
-
-<!-- Mobile hamburger button — fixed but positioned to not overlap headers -->
-<button
-	onclick={() => { mobileOpen = !mobileOpen; }}
-	class="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-vault-surface border border-vault-border shadow-lg"
-	aria-label="Toggle menu"
->
-	<svg class="w-5 h-5 text-vault-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-		{#if mobileOpen}
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-		{:else}
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-		{/if}
-	</svg>
-</button>
 
 <!-- Mobile overlay -->
 {#if mobileOpen}

@@ -223,11 +223,11 @@
 			</p>
 		</div>
 
-		<!-- E2E badge -->
+		<!-- E2E indicator -->
 		<div class="flex justify-center mb-8">
-			<div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-vault-green/30 bg-vault-green-muted">
-				<div class="w-1.5 h-1.5 rounded-full bg-vault-green animate-pulse"></div>
-				<span class="text-xs text-vault-green">End-to-end encrypted</span>
+			<div class="inline-flex items-center gap-2">
+				<div class="w-1.5 h-1.5 rounded-full bg-vault-green"></div>
+				<span class="text-sm text-zinc-400">End-to-end encrypted</span>
 			</div>
 		</div>
 
@@ -241,7 +241,7 @@
 					<svg class="w-4 h-4 text-vault-amber" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
 					</svg>
-					<span class="text-sm font-medium text-vault-text">Safety Tips for Whistleblowers</span>
+					<span class="text-sm font-medium text-vault-text">Before You Submit</span>
 				</div>
 				<svg class="w-4 h-4 text-vault-text-dim transition-transform {showSafetyGuide ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -267,7 +267,7 @@
 					</div>
 					<div class="flex items-start gap-2">
 						<span class="text-vault-amber mt-0.5">5.</span>
-						<p><strong>Don't tell anyone you submitted a tip</strong> until you speak directly with a journalist.</p>
+						<p><strong>Don't tell anyone you submitted a report</strong> until you speak directly with your contact.</p>
 					</div>
 				</div>
 			{/if}
@@ -364,9 +364,9 @@
 								<span class="truncate min-w-0">{file.name}</span>
 								<span class="text-vault-text-dim shrink-0 hidden sm:inline">({(file.size / 1024).toFixed(1)} KB)</span>
 								{#if isImageFile(file)}
-									<span class="text-vault-green text-[10px] shrink-0 hidden sm:inline">EXIF stripped</span>
+									<span class="text-zinc-500 text-[10px] shrink-0 hidden sm:inline">Metadata removed</span>
 								{:else}
-									<span class="text-vault-amber text-[10px] shrink-0 hidden sm:inline">metadata</span>
+									<span class="text-zinc-500 text-[10px] shrink-0 hidden sm:inline">metadata intact</span>
 								{/if}
 								<button
 									type="button"

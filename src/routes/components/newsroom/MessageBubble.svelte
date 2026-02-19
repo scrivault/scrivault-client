@@ -53,14 +53,14 @@
 		class="max-w-[75%] rounded-lg px-4 py-2.5
 			{isSource
 			? 'bg-vault-surface border border-vault-border'
-			: 'bg-green-900/40 border border-green-800/30'}"
+			: 'bg-emerald-900/30 border border-emerald-800/20'}"
 	>
 		<!-- Header: shown only when sender changes -->
 		{#if !sameSender}
 			<div class="flex items-center gap-2 mb-1">
 				<span
 					class="text-[11px] font-medium
-						{isSource ? 'text-zinc-400' : 'text-green-400/70'}"
+						{isSource ? 'text-zinc-400' : 'text-emerald-400/60'}"
 				>
 					{label}
 				</span>

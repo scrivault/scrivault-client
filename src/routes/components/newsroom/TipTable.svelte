@@ -5,11 +5,13 @@
 	let {
 		tips,
 		onRowClick,
-		currentUserId = null
+		currentUserId = null,
+		subjectMap = new Map()
 	}: {
 		tips: TipSummary[];
 		onRowClick: (tip: TipSummary) => void;
 		currentUserId?: string | null;
+		subjectMap?: Map<string, string>;
 	} = $props();
 
 	function formatTimeAgo(iso: string): string {
@@ -62,6 +64,7 @@
 	<tbody>
 		{#each tips as tip (tip.id)}
 			{@const hasUnread = tip.unread_count > 0}
+			{@const subject = subjectMap.get(tip.id)}
 			<tr
 				onclick={() => onRowClick(tip)}
 				class="border-b border-vault-border cursor-pointer transition-colors hover:bg-vault-surface {hasUnread ? 'font-medium' : ''}"
@@ -69,12 +72,19 @@
 				<td class="px-3 py-3.5 align-middle">
 					<StatusPill status={tip.status} />
 				</td>
-				<td class="px-3 py-3.5 align-middle">
+				<td class="px-3 py-3.5 align-middle max-w-[240px]">
 					<div class="flex items-center gap-2">
 						{#if hasUnread}
 							<span class="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
 						{/if}
-						<span class="font-mono text-[12px] text-vault-text">{truncateId(tip.blinded_id)}…</span>
+						<div class="min-w-0">
+							{#if subject}
+								<span class="text-[12px] text-vault-text truncate block">{subject}</span>
+								<span class="font-mono text-[10px] text-vault-text-dim">{truncateId(tip.blinded_id)}…</span>
+							{:else}
+								<span class="font-mono text-[12px] text-vault-text">{truncateId(tip.blinded_id)}…</span>
+							{/if}
+						</div>
 					</div>
 				</td>
 				<td class="px-3 py-3.5 align-middle">

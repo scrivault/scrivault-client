@@ -16,6 +16,8 @@
 
 	let { children } = $props();
 
+	let sidebarOpen = $state(false);
+
 	const publicPaths = ['/newsroom/login', '/newsroom/register'];
 	const isPublicPage = $derived(publicPaths.includes($page.url.pathname as string));
 
@@ -103,8 +105,22 @@
 	{@render children()}
 {:else if $newsroomAuth.token}
 	<div class="min-h-screen flex bg-vault-bg">
-		<Sidebar />
-		<main class="flex-1 min-w-0 flex flex-col overflow-hidden">
+		<Sidebar bind:mobileOpen={sidebarOpen} />
+		<main class="flex-1 min-w-0 flex flex-col overflow-hidden relative">
+			<!-- Mobile hamburger — positioned in header row -->
+			<button
+				onclick={() => { sidebarOpen = !sidebarOpen; }}
+				class="md:hidden absolute top-3 left-3 z-30 p-2 rounded-lg bg-vault-surface border border-vault-border"
+				aria-label="Toggle menu"
+			>
+				<svg class="w-5 h-5 text-vault-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					{#if sidebarOpen}
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					{:else}
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+					{/if}
+				</svg>
+			</button>
 			{@render children()}
 		</main>
 	</div>

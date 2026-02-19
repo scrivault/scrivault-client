@@ -12,7 +12,6 @@
 
 	let orgName = $state('');
 	let orgSlug = $state('');
-	let slugEdited = $state(false);
 	let displayName = $state('');
 	let email = $state('');
 	let password = $state('');
@@ -41,14 +40,7 @@
 	}
 
 	function handleOrgNameInput() {
-		if (!slugEdited) {
-			orgSlug = generateSlug(orgName);
-		}
-	}
-
-	function handleSlugInput() {
-		slugEdited = true;
-		orgSlug = generateSlug(orgSlug);
+		orgSlug = generateSlug(orgName);
 	}
 
 	async function handleSubmit() {
@@ -159,16 +151,10 @@
 			{/if}
 
 			<!-- Organization section -->
-			<div
-				class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mt-2 mb-1"
-			>
-				Organization
-			</div>
-
 			<div>
 				<label
 					for="org-name"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-1.5"
 				>
 					Organization Name
 				</label>
@@ -183,49 +169,17 @@
 				/>
 			</div>
 
-			<div>
-				<label
-					for="org-slug"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
-				>
-					Your Tip Page URL
-				</label>
-				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="flex items-center bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 focus-within:border-vault-green focus-within:ring-1 focus-within:ring-vault-green/50 transition-colors cursor-text"
-					onclick={() => document.getElementById('org-slug')?.focus()}
-				>
-					<span class="text-sm font-mono text-vault-text-dim select-none whitespace-nowrap"
-						>https://</span
-					>
-					<input
-						id="org-slug"
-						type="text"
-						bind:value={orgSlug}
-						oninput={handleSlugInput}
-						required
-						style="width: {Math.max(orgSlug.length, 1)}ch"
-						class="bg-transparent border-none outline-none text-sm font-mono text-vault-green placeholder:text-vault-text-dim min-w-[3ch] p-0"
-						placeholder="xxx"
-					/>
-					<span class="text-sm font-mono text-vault-text-dim select-none whitespace-nowrap"
-						>.scrivault.org</span
-					>
-				</div>
-			</div>
-
 			<!-- Admin account section -->
 			<div
-				class="font-mono text-[9px] tracking-[2px] uppercase text-vault-text-dim mt-6 mb-1"
+				class="text-[10px] tracking-wide font-medium text-vault-text-dim mt-6 mb-1"
 			>
-				Editor Account
+				Your Account
 			</div>
 
 			<div>
 				<label
 					for="display-name"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-1.5"
 				>
 					Your Name
 				</label>
@@ -243,7 +197,7 @@
 			<div>
 				<label
 					for="email"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-1.5"
 				>
 					Email
 				</label>
@@ -254,14 +208,14 @@
 					required
 					autocomplete="email"
 					class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text placeholder:text-vault-text-dim focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
-					placeholder="you@newsroom.org"
+					placeholder="you@yourorg.com"
 				/>
 			</div>
 
 			<div>
 				<label
 					for="password"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-1.5"
 				>
 					Password
 				</label>
@@ -282,7 +236,7 @@
 			<div>
 				<label
 					for="confirm-password"
-					class="block font-mono text-[10px] tracking-wider uppercase text-vault-text-dim mb-1.5"
+					class="block text-[10px] tracking-wide font-medium text-vault-text-dim mb-1.5"
 				>
 					Confirm Password
 				</label>

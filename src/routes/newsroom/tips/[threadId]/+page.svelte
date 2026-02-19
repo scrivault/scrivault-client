@@ -31,6 +31,22 @@
 
 	let messages: NewsroomMessage[] = $state([]);
 	let decryptedTexts: Map<string, string> = $state(new Map());
+
+	// Extract subject from the first decrypted message for display
+	const reportSubject = $derived.by(() => {
+		if (messages.length === 0 || decryptedTexts.size === 0) return null;
+		const firstMsg = messages[0];
+		if (!firstMsg) return null;
+		const text = decryptedTexts.get(firstMsg.id);
+		if (!text) return null;
+		const firstLine = text.split('\n')[0];
+		const match = firstLine.match(/^\[.*?\]\s*(.+)$/);
+		if (match && match[1].trim()) return match[1].trim();
+		const topicMatch = firstLine.match(/^\[(.+?)\]$/);
+		if (topicMatch) return topicMatch[1];
+		return firstLine.slice(0, 80) || null;
+	});
+
 	let threadKey: Uint8Array | null = $state(null);
 	let canDecrypt = $state(false);
 	let decryptError = $state('');
@@ -120,7 +136,10 @@
 
 	function senderLabel(msg: NewsroomMessage): string {
 		if (msg.sender_role === 'source') return 'Sender';
-		return msg.sender_display_name || 'Responder';
+		const name = msg.sender_display_name || 'Responder';
+		// Normalize all-caps emails to lowercase
+		if (name.includes('@')) return name.toLowerCase();
+		return name;
 	}
 
 	function initials(name: string): string {
@@ -301,7 +320,8 @@
 			doc.loading = false;
 			// Trigger reactivity
 			decryptedDocs = new Map(decryptedDocs);
-		} catch {
+		} catch (err) {
+			console.error(`Failed to decrypt document ${docId}:`, err);
 			doc.loading = false;
 			decryptedDocs = new Map(decryptedDocs);
 		}
@@ -718,7 +738,8 @@
 		y += 7;
 
 		for (const msg of messages) {
-			const sender = msg.sender_role === 'source' ? 'Sender' : (msg.sender_display_name || 'Responder');
+			const rawName = msg.sender_display_name || 'Responder';
+			const sender = msg.sender_role === 'source' ? 'Sender' : (rawName.includes('@') ? rawName.toLowerCase() : rawName);
 			const text = decryptedTexts.get(msg.id) ?? '[unable to decrypt]';
 			const timestamp = formatTimestamp(msg.created_at);
 			const isSender = msg.sender_role === 'source';
@@ -1023,6 +1044,9 @@
 				if (notification.type === 'new_document') {
 					loadDocuments().then(() => decryptAllDocuments());
 				}
+				if (notification.type === 'new_note') {
+					loadNotes();
+				}
 			}
 		});
 
@@ -1033,7 +1057,7 @@
 </script>
 
 <svelte:head>
-	<title>Report {shortId}… — Scrivault</title>
+	<title>{reportSubject ?? `Report ${shortId}…`} — Scrivault</title>
 </svelte:head>
 
 <!-- Header -->
@@ -1056,7 +1080,7 @@
 			</svg>
 		</a>
 		<div>
-			<h2 class="text-sm font-medium text-vault-text">Report</h2>
+			<h2 class="text-sm font-medium text-vault-text">{reportSubject ?? 'Report'}</h2>
 			<span class="font-mono text-[11px] text-vault-text-dim">{shortId}…</span>
 		</div>
 	</div>
@@ -1123,7 +1147,7 @@
 								{initials(assigneeName ?? '??')}
 							</span>
 						</div>
-						<span class="text-[10px] text-vault-text-muted">
+						<span class="text-[11px] text-zinc-300 font-medium">
 							{isAssignedToMe ? 'Assigned to you' : `Assigned to ${assigneeName ?? 'Unknown'}`}
 						</span>
 					</div>
@@ -1202,7 +1226,7 @@
 	{/if}
 
 	<!-- Messages -->
-	<div class="flex-1 overflow-y-auto px-6 py-6">
+	<div class="flex-1 overflow-y-auto px-6 py-6 max-md:pb-24">
 		{#if messages.length === 0}
 			<div class="flex items-center justify-center py-12 text-sm text-vault-text-dim">
 				No messages yet.
@@ -1353,8 +1377,8 @@
 		</div>
 	{/if}
 
-	<!-- Reply area — sticky on mobile so it's always accessible -->
-	<div class="shrink-0 sticky bottom-0 z-10 px-6 py-3 border-t border-vault-border bg-vault-surface/95 backdrop-blur-sm">
+	<!-- Reply area — fixed on mobile, sticky on desktop -->
+	<div class="shrink-0 max-md:fixed max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:z-20 md:sticky md:bottom-0 z-10 px-6 py-3 border-t border-vault-border bg-vault-surface/95 backdrop-blur-sm">
 		{#if canDecrypt}
 			<form
 				onsubmit={(e) => {

@@ -59,6 +59,9 @@ export interface TipSummary {
 	unread_count: number;
 	last_activity: string;
 	created_at: string;
+	first_message_ciphertext?: string; // base64
+	first_message_nonce?: string; // base64
+	sealed_key?: string; // base64
 }
 
 export interface TipListResponse {

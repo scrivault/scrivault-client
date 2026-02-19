@@ -2,16 +2,19 @@
 	import { goto } from '$app/navigation';
 	import { newsroomApi } from '$lib/newsroom/api';
 	import { newsroomAuth } from '$lib/newsroom/auth';
+	import { unsealThreadKey, decryptMessage, fromBase64 } from '$lib/crypto';
 	import type { TipSummary, TipStatus, TipFilterParams } from '$lib/newsroom/types';
 	import TipTable from '../../components/newsroom/TipTable.svelte';
 	import EmptyState from '../../components/newsroom/EmptyState.svelte';
 
 	const user = $derived($newsroomAuth.user);
+	const privateKey = $derived($newsroomAuth.privateKey);
 
 	let tips: TipSummary[] = $state([]);
 	let loading = $state(true);
 	let error = $state('');
 	let statusFilter: TipStatus | 'all' = $state('all');
+	let subjectMap: Map<string, string> = $state(new Map());
 
 	// Stats (always from the full 'all' load cached at mount)
 	let allTips: TipSummary[] = $state([]);
@@ -31,6 +34,41 @@
 		{ label: 'Closed', value: 'closed' }
 	];
 
+	/** Extract subject from decrypted first message text.
+	 *  Format is: "[Topic] Subject\n\nBody" or "[Topic]\n\nBody" */
+	function extractSubject(plaintext: string): string {
+		const firstLine = plaintext.split('\n')[0];
+		// Pattern: [Topic] Subject
+		const match = firstLine.match(/^\[.*?\]\s*(.+)$/);
+		if (match && match[1].trim()) return match[1].trim();
+		// If only topic with no subject, use topic
+		const topicMatch = firstLine.match(/^\[(.+?)\]$/);
+		if (topicMatch) return topicMatch[1];
+		// Fallback: first line
+		return firstLine.slice(0, 80) || 'Untitled Report';
+	}
+
+	async function decryptSubjects(tipList: TipSummary[]) {
+		if (!privateKey) return;
+		const newMap = new Map(subjectMap);
+		for (const tip of tipList) {
+			if (newMap.has(tip.id)) continue;
+			if (!tip.sealed_key || !tip.first_message_ciphertext || !tip.first_message_nonce) continue;
+			try {
+				const threadKey = await unsealThreadKey(fromBase64(tip.sealed_key), privateKey);
+				const plaintext = await decryptMessage(
+					fromBase64(tip.first_message_ciphertext),
+					fromBase64(tip.first_message_nonce),
+					threadKey
+				);
+				newMap.set(tip.id, extractSubject(plaintext));
+			} catch {
+				// Can't decrypt — will show hash fallback
+			}
+		}
+		subjectMap = newMap;
+	}
+
 	async function loadTips(filter?: TipFilterParams) {
 		loading = true;
 		error = '';
@@ -41,6 +79,7 @@
 			if (!filter?.status) {
 				allTips = tips;
 			}
+			decryptSubjects(tips);
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load reports.';
 		} finally {
@@ -75,6 +114,7 @@
 			const filter = currentFilter();
 			newsroomApi.getTips(filter).then((res) => {
 				tips = res.tips ?? [];
+				decryptSubjects(tips);
 			}).catch(() => {
 				// Silent failure — will retry next interval
 			});
@@ -164,7 +204,7 @@
 		{#if tips.length === 0}
 			<EmptyState message="No reports match this filter." />
 		{:else}
-			<TipTable tips={tips} onRowClick={handleRowClick} currentUserId={user?.journalist_id ?? null} />
+			<TipTable tips={tips} onRowClick={handleRowClick} currentUserId={user?.journalist_id ?? null} {subjectMap} />
 		{/if}
 	{/if}
 </div>
