@@ -13,7 +13,8 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@scrivault/protocol": "workspace:*"
+    "@scrivault/protocol": "workspace:*",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

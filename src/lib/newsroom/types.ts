@@ -83,6 +83,7 @@ export interface NewsroomMessage {
 	ciphertext: string; // base64
 	nonce: string; // base64
 	sender_role: 'source' | 'journalist';
+	sender_display_name?: string;
 	ordinal: number;
 	created_at: string;
 }

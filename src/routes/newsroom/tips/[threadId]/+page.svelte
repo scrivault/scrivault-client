@@ -13,6 +13,7 @@
 		toBase64
 	} from '$lib/crypto';
 	import { ApiError, api } from '$lib/api';
+	import JSZip from 'jszip';
 	import type { ProvenanceEntry } from '$lib/api';
 	import { getToken } from '$lib/newsroom/auth';
 	import { createWsConnection, newsroomWsUrl } from '$lib/ws';
@@ -119,7 +120,7 @@
 
 	function senderLabel(msg: NewsroomMessage): string {
 		if (msg.sender_role === 'source') return 'Sender';
-		return user?.display_name ?? 'Responder';
+		return msg.sender_display_name || 'Responder';
 	}
 
 	function initials(name: string): string {
@@ -602,10 +603,90 @@
 		}
 	}
 
+	async function handleExportWithFiles() {
+		if (!canDecrypt || decryptedTexts.size === 0) return;
+		exporting = true;
+		exportError = '';
+
+		try {
+			// Collect provenance chain if requested
+			let provenance: ProvenanceEntry[] = [];
+			if (exportIncludeProvenance) {
+				try {
+					const provRes = await api.getProvenance(threadId);
+					provenance = provRes.entries ?? [];
+				} catch {
+					// Non-critical
+				}
+			}
+
+			const exportData = buildExportData(provenance);
+			const zip = new JSZip();
+
+			// Add JSON manifest
+			zip.file('export.json', JSON.stringify(exportData, null, 2));
+
+			// Add plain text version
+			zip.file('export.txt', buildPlainTextExport(exportData));
+
+			// Add decrypted files
+			for (const rawDoc of threadDocuments) {
+				const decDoc = decryptedDocs.get(rawDoc.id);
+				if (!decDoc) continue;
+
+				// Ensure the document is decrypted (fetch if needed)
+				let blobUrl = decDoc.blobUrl;
+				if (!blobUrl && threadKey) {
+					try {
+						await fetchAndDecryptDocument(rawDoc.id);
+						blobUrl = decryptedDocs.get(rawDoc.id)?.blobUrl ?? null;
+					} catch {
+						continue; // Skip files that fail to decrypt
+					}
+				}
+
+				if (blobUrl) {
+					try {
+						const response = await fetch(blobUrl);
+						const blob = await response.blob();
+						const arrayBuffer = await blob.arrayBuffer();
+						zip.file(`files/${decDoc.fileName}`, arrayBuffer);
+					} catch {
+						// Skip files that fail to read
+					}
+				}
+			}
+
+			// Generate zip and trigger download
+			const zipBlob = await zip.generateAsync({ type: 'blob' });
+			const url = URL.createObjectURL(zipBlob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `scrivault-thread-${shortId}-export.zip`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+
+			showExportModal = false;
+		} catch (err) {
+			exportError = err instanceof Error ? err.message : 'Export failed.';
+		} finally {
+			exporting = false;
+		}
+	}
+
 	interface ExportMessage {
 		sender: string;
 		timestamp: string;
 		content: string;
+	}
+
+	interface ExportDocument {
+		filename: string;
+		size: number;
+		mime_type: string;
+		sha256_hash: string;
 	}
 
 	interface ExportData {
@@ -616,15 +697,29 @@
 		assigned_to: string | null;
 		message_count: number;
 		messages: ExportMessage[];
+		document_count: number;
+		documents: ExportDocument[];
 		provenance?: ProvenanceEntry[];
 	}
 
 	function buildExportData(provenance: ProvenanceEntry[]): ExportData {
 		const exportMessages: ExportMessage[] = messages.map((msg) => ({
-			sender: msg.sender_role === 'source' ? 'Sender' : (user?.display_name ?? 'Responder'),
+			sender: msg.sender_role === 'source' ? 'Sender' : (msg.sender_display_name || 'Responder'),
 			timestamp: msg.created_at,
 			content: decryptedTexts.get(msg.id) ?? '[unable to decrypt]'
 		}));
+
+		// Build documents array from decrypted docs + raw metadata (for hashes)
+		const exportDocuments: ExportDocument[] = [];
+		for (const rawDoc of threadDocuments) {
+			const decDoc = decryptedDocs.get(rawDoc.id);
+			exportDocuments.push({
+				filename: decDoc?.fileName ?? `document-${rawDoc.id.slice(0, 8)}`,
+				size: rawDoc.file_size,
+				mime_type: decDoc?.mimeType ?? 'application/octet-stream',
+				sha256_hash: rawDoc.sha256_hash
+			});
+		}
 
 		const data: ExportData = {
 			thread_id: threadId,
@@ -633,7 +728,9 @@
 			status: tipStatus,
 			assigned_to: assigneeName,
 			message_count: exportMessages.length,
-			messages: exportMessages
+			messages: exportMessages,
+			document_count: exportDocuments.length,
+			documents: exportDocuments
 		};
 
 		if (provenance.length > 0) {
@@ -657,6 +754,7 @@
 		lines.push(`Exported by:  ${data.exported_by}`);
 		lines.push(`Exported at:  ${formatTimestamp(data.exported_at)}`);
 		lines.push(`Messages:     ${data.message_count}`);
+		lines.push(`Documents:    ${data.document_count}`);
 		lines.push(divider);
 		lines.push('');
 
@@ -667,6 +765,21 @@
 			lines.push(`[${formatTimestamp(msg.timestamp)}] ${msg.sender}:`);
 			lines.push(msg.content);
 			lines.push('');
+		}
+
+		if (data.documents.length > 0) {
+			lines.push(divider);
+			lines.push('DOCUMENTS');
+			lines.push(divider);
+			lines.push('');
+
+			for (const doc of data.documents) {
+				lines.push(`  File:     ${doc.filename}`);
+				lines.push(`  Size:     ${formatFileSize(doc.size)}`);
+				lines.push(`  Type:     ${doc.mime_type}`);
+				lines.push(`  SHA-256:  ${doc.sha256_hash}`);
+				lines.push('');
+			}
 		}
 
 		if (data.provenance && data.provenance.length > 0) {
@@ -1325,11 +1438,17 @@
 				</label>
 
 				<!-- Summary -->
-				<div class="px-3 py-2 rounded bg-vault-bg border border-vault-border-subtle">
+				<div class="px-3 py-2 rounded bg-vault-bg border border-vault-border-subtle space-y-1.5">
 					<div class="flex items-center justify-between text-[10px] text-vault-text-dim">
 						<span>{decryptedTexts.size} messages</span>
 						<span>{exportFormat === 'text' ? '.txt' : '.json'}</span>
 					</div>
+					{#if threadDocuments.length > 0}
+						<div class="flex items-center justify-between text-[10px] text-vault-text-dim">
+							<span>{threadDocuments.length} document{threadDocuments.length !== 1 ? 's' : ''}</span>
+							<span>included in metadata</span>
+						</div>
+					{/if}
 				</div>
 
 				{#if exportError}
@@ -1337,25 +1456,40 @@
 				{/if}
 
 				<!-- Actions -->
-				<div class="flex gap-2">
-					<button
-						type="button"
-						onclick={() => { showExportModal = false; }}
-						class="flex-1 px-3 py-2 rounded text-[11px] text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
-					>
-						Cancel
-					</button>
-					<button
-						onclick={handleExport}
-						disabled={exporting}
-						class="flex-1 px-3 py-2 rounded text-[11px] text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-					>
-						{#if exporting}
-							Exporting…
-						{:else}
-							Download
-						{/if}
-					</button>
+				<div class="space-y-2">
+					<div class="flex gap-2">
+						<button
+							type="button"
+							onclick={() => { showExportModal = false; }}
+							class="flex-1 px-3 py-2 rounded text-[11px] text-vault-text-muted bg-vault-surface-raised border border-vault-border hover:text-vault-text transition-colors"
+						>
+							Cancel
+						</button>
+						<button
+							onclick={handleExport}
+							disabled={exporting}
+							class="flex-1 px-3 py-2 rounded text-[11px] text-black bg-vault-green hover:bg-vault-green-dim border border-vault-green/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+						>
+							{#if exporting}
+								Exporting…
+							{:else}
+								Download
+							{/if}
+						</button>
+					</div>
+					{#if threadDocuments.length > 0}
+						<button
+							onclick={handleExportWithFiles}
+							disabled={exporting}
+							class="w-full px-3 py-2 rounded text-[11px] text-vault-text bg-vault-surface-raised border border-vault-border hover:border-vault-green/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+						>
+							{#if exporting}
+								Bundling files…
+							{:else}
+								Download with files (.zip)
+							{/if}
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>
