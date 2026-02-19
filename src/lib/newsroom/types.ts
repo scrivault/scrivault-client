@@ -266,6 +266,7 @@ export interface ThreadNote {
 	id: string;
 	thread_id: string;
 	journalist_id: string;
+	author_name?: string;
 	ciphertext: string; // base64
 	nonce: string; // base64
 	created_at: string;

@@ -132,6 +132,19 @@
 			.slice(0, 2);
 	}
 
+	function relativeTime(iso: string): string {
+		const diff = Date.now() - new Date(iso).getTime();
+		const seconds = Math.floor(diff / 1000);
+		if (seconds < 60) return 'just now';
+		const minutes = Math.floor(seconds / 60);
+		if (minutes < 60) return `${minutes}m ago`;
+		const hours = Math.floor(minutes / 60);
+		if (hours < 24) return `${hours}h ago`;
+		const days = Math.floor(hours / 24);
+		if (days < 30) return `${days}d ago`;
+		return new Date(iso).toLocaleDateString();
+	}
+
 	const statuses: TipStatus[] = ['new', 'review', 'active', 'closed'];
 
 	async function loadNotes() {
@@ -145,15 +158,33 @@
 
 	async function handleSaveNote() {
 		if (!newNoteText.trim() || !threadKey) return;
+		const plaintext = newNoteText.trim();
 		savingNote = true;
 		try {
-			const encrypted = await encryptMessage(newNoteText.trim(), threadKey);
+			const encrypted = await encryptMessage(plaintext, threadKey);
+
+			// Optimistic: add the note to the list immediately with plaintext
+			const optimisticId = `optimistic-${Date.now()}`;
+			const optimisticNote: ThreadNote = {
+				id: optimisticId,
+				thread_id: threadId,
+				journalist_id: user?.journalist_id ?? '',
+				author_name: user?.display_name ?? '',
+				ciphertext: toBase64(encrypted.ciphertext),
+				nonce: toBase64(encrypted.nonce),
+				created_at: new Date().toISOString()
+			};
+			notes = [...notes, optimisticNote];
+			decryptedNotes = new Map([...decryptedNotes, [optimisticId, plaintext]]);
+			newNoteText = '';
+
+			// Send to server, then refresh to get real IDs
 			await newsroomApi.createNote(threadId, {
 				ciphertext: toBase64(encrypted.ciphertext),
 				nonce: toBase64(encrypted.nonce)
 			});
-			newNoteText = '';
 			await loadNotes();
+			await decryptAllNotes();
 		} catch {
 			// Silently fail
 		} finally {
@@ -1275,19 +1306,24 @@
 			{#if showNotes}
 				<div class="px-6 pb-3 space-y-2 max-h-48 overflow-y-auto">
 					{#each notes as note (note.id)}
-						<div class="flex items-start gap-2 px-3 py-2 rounded bg-vault-surface-raised border border-vault-border">
-							<p class="flex-1 text-xs text-vault-text whitespace-pre-wrap">{decryptedNotes.get(note.id) ?? '[encrypted]'}</p>
-							{#if note.journalist_id === user?.journalist_id}
-								<button
-									onclick={() => handleDeleteNote(note.id)}
-									class="shrink-0 text-[10px] text-vault-text-dim hover:text-vault-red transition-colors"
-									title="Delete note"
-								>
-									<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-									</svg>
-								</button>
-							{/if}
+						<div class="px-3 py-2 rounded bg-vault-surface-raised border border-vault-border">
+							<div class="flex items-center justify-between mb-1">
+								<span class="text-[10px] text-vault-text-dim">
+									{note.author_name || 'Unknown'} · {relativeTime(note.created_at)}
+								</span>
+								{#if note.journalist_id === user?.journalist_id}
+									<button
+										onclick={() => handleDeleteNote(note.id)}
+										class="shrink-0 text-[10px] text-vault-text-dim hover:text-vault-red transition-colors"
+										title="Delete note"
+									>
+										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								{/if}
+							</div>
+							<p class="text-xs text-vault-text whitespace-pre-wrap">{decryptedNotes.get(note.id) ?? '[encrypted]'}</p>
 						</div>
 					{/each}
 					{#if notes.length === 0}
