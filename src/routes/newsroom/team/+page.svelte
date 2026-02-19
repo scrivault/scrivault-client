@@ -154,7 +154,7 @@
 	<title>Team — Scrivault</title>
 </svelte:head>
 
-<div class="flex-1 overflow-y-auto p-6">
+<div class="flex-1 overflow-y-auto pl-14 pr-6 py-6 md:p-6">
 	<div class="max-w-2xl mx-auto space-y-8">
 		<!-- Header -->
 		<div>

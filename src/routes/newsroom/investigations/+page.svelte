@@ -70,7 +70,7 @@
 
 <!-- Header -->
 <div
-	class="flex items-center justify-between px-6 py-4 border-b border-vault-border bg-vault-surface"
+	class="flex items-center justify-between pl-14 pr-6 md:px-6 py-4 border-b border-vault-border bg-vault-surface"
 >
 	<h2 class="text-lg font-medium text-vault-text">Investigations</h2>
 	{#if isEditor}

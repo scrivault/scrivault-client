@@ -38,10 +38,10 @@
 	}
 </script>
 
-<!-- Mobile hamburger button -->
+<!-- Mobile hamburger button — fixed but positioned to not overlap headers -->
 <button
 	onclick={() => { mobileOpen = !mobileOpen; }}
-	class="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-vault-surface border border-vault-border"
+	class="md:hidden fixed top-3 left-3 z-50 p-2 rounded-lg bg-vault-surface border border-vault-border shadow-lg"
 	aria-label="Toggle menu"
 >
 	<svg class="w-5 h-5 text-vault-text" fill="none" stroke="currentColor" viewBox="0 0 24 24">

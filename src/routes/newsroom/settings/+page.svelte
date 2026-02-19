@@ -110,7 +110,7 @@
 </svelte:head>
 
 <!-- Header -->
-<div class="px-6 py-4 border-b border-vault-border bg-vault-surface shrink-0">
+<div class="pl-14 pr-6 md:px-6 py-4 border-b border-vault-border bg-vault-surface shrink-0">
 	<h2 class="text-sm font-medium text-vault-text">Settings</h2>
 	<p class="text-[11px] text-vault-text-dim mt-0.5">Account and security settings</p>
 </div>

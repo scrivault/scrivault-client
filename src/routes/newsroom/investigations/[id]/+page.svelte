@@ -42,7 +42,7 @@
 
 <!-- Header -->
 <div
-	class="flex items-center justify-between px-6 py-4 border-b border-vault-border bg-vault-surface"
+	class="flex items-center justify-between pl-14 pr-6 md:px-6 py-4 border-b border-vault-border bg-vault-surface"
 >
 	<div class="flex items-center gap-3">
 		<a

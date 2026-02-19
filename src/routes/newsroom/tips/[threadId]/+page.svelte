@@ -68,8 +68,28 @@
 		fileName: string;
 		fileSize: number;
 		blobUrl: string | null;
+		previewUrl: string | null;
+		isImage: boolean;
+		mimeType: string;
 		createdAt: string;
+		loading: boolean;
 	}
+
+	const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico']);
+	function getExtension(name: string): string {
+		const parts = name.split('.');
+		return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+	}
+	function getMimeType(name: string): string {
+		const ext = getExtension(name);
+		const map: Record<string, string> = {
+			png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+			gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+			bmp: 'image/bmp', pdf: 'application/pdf', txt: 'text/plain',
+		};
+		return map[ext] ?? 'application/octet-stream';
+	}
+
 	let threadDocuments: DocumentMeta[] = $state([]);
 	let decryptedDocs: Map<string, DecryptedDoc> = $state(new Map());
 
@@ -196,24 +216,42 @@
 					} catch { /* use default name */ }
 				}
 
-				newMap.set(doc.id, {
+				const ext = getExtension(fileName);
+				const isImage = IMAGE_EXTENSIONS.has(ext);
+				const mimeType = getMimeType(fileName);
+
+				const entry: DecryptedDoc = {
 					id: doc.id,
 					fileName,
 					fileSize: doc.file_size,
 					blobUrl: null,
-					createdAt: doc.created_at
-				});
+					previewUrl: null,
+					isImage,
+					mimeType,
+					createdAt: doc.created_at,
+					loading: isImage // images will auto-decrypt for preview
+				};
+				newMap.set(doc.id, entry);
 			} catch {
 				// skip unreadable docs
 			}
 		}
 		decryptedDocs = newMap;
+
+		// Auto-decrypt images for inline preview
+		for (const [docId, doc] of newMap) {
+			if (doc.isImage) {
+				fetchAndDecryptDocument(docId).catch(() => {});
+			}
+		}
 	}
 
-	async function handleDownloadDocument(docId: string) {
+	async function fetchAndDecryptDocument(docId: string): Promise<void> {
 		if (!threadKey) return;
+		const doc = decryptedDocs.get(docId);
+		if (!doc) return;
+
 		try {
-			// Fetch full encrypted document via source-side endpoint
 			const res = await fetch(`/api/documents/${docId}`, {
 				headers: { Authorization: `Bearer ${getToken()}` }
 			});
@@ -224,16 +262,52 @@
 				fromBase64(data.nonce),
 				threadKey
 			);
-			const blob = new Blob([plaintext]);
+			const blob = new Blob([plaintext], { type: doc.mimeType });
 			const url = URL.createObjectURL(blob);
+			doc.blobUrl = url;
+			doc.previewUrl = url;
+			doc.loading = false;
+			// Trigger reactivity
+			decryptedDocs = new Map(decryptedDocs);
+		} catch {
+			doc.loading = false;
+			decryptedDocs = new Map(decryptedDocs);
+		}
+	}
+
+	async function handleDownloadDocument(docId: string) {
+		if (!threadKey) return;
+		const doc = decryptedDocs.get(docId);
+		if (!doc) return;
+
+		try {
+			let url = doc.blobUrl;
+
+			// If we already have the decrypted blob, use it directly
+			if (!url) {
+				const res = await fetch(`/api/documents/${docId}`, {
+					headers: { Authorization: `Bearer ${getToken()}` }
+				});
+				if (!res.ok) throw new Error('Failed to fetch document');
+				const data = await res.json();
+				const plaintext = await decryptFile(
+					fromBase64(data.ciphertext),
+					fromBase64(data.nonce),
+					threadKey
+				);
+				const blob = new Blob([plaintext], { type: doc.mimeType });
+				url = URL.createObjectURL(blob);
+				doc.blobUrl = url;
+				doc.previewUrl = url;
+				decryptedDocs = new Map(decryptedDocs);
+			}
+
 			const a = document.createElement('a');
 			a.href = url;
-			const doc = decryptedDocs.get(docId);
-			a.download = doc?.fileName ?? `document-${docId.slice(0, 8)}`;
+			a.download = doc.fileName;
 			document.body.appendChild(a);
 			a.click();
 			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
 		} catch (err) {
 			console.warn('Failed to download document:', err);
 		}
@@ -702,7 +776,7 @@
 
 <!-- Header -->
 <div
-	class="flex items-center justify-between px-6 py-3 border-b border-vault-border bg-vault-surface shrink-0"
+	class="flex items-center justify-between pl-14 pr-6 md:px-6 py-3 border-b border-vault-border bg-vault-surface shrink-0"
 >
 	<div class="flex items-center gap-3">
 		<a
@@ -890,25 +964,60 @@
 				<p class="text-[10px] font-medium tracking-wide text-zinc-500 mb-3">
 					Attached Files ({decryptedDocs.size})
 				</p>
-				<div class="space-y-2">
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
 					{#each [...decryptedDocs.values()] as doc (doc.id)}
-						<button
-							onclick={() => handleDownloadDocument(doc.id)}
-							class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-vault-surface border border-vault-border hover:border-vault-green/30 transition-colors text-left group"
-						>
-							<div class="w-8 h-8 rounded bg-vault-surface-raised border border-vault-border flex items-center justify-center shrink-0">
-								<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+						<div class="rounded-lg bg-vault-surface border border-vault-border overflow-hidden group hover:border-vault-green/30 transition-colors">
+							<!-- Image preview -->
+							{#if doc.isImage && doc.previewUrl}
+								<button
+									onclick={() => handleDownloadDocument(doc.id)}
+									class="w-full bg-vault-bg p-2 cursor-pointer"
+									title="Click to download"
+								>
+									<img
+										src={doc.previewUrl}
+										alt={doc.fileName}
+										class="max-w-full max-h-48 rounded object-contain mx-auto"
+									/>
+								</button>
+							{:else if doc.isImage && doc.loading}
+								<div class="w-full bg-vault-bg p-6 flex items-center justify-center">
+									<div class="flex items-center gap-2 text-vault-text-muted">
+										<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+											<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+										</svg>
+										<span class="text-xs">Decrypting image…</span>
+									</div>
+								</div>
+							{/if}
+
+							<!-- File info bar -->
+							<button
+								onclick={() => handleDownloadDocument(doc.id)}
+								class="w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer"
+								title="Download {doc.fileName}"
+							>
+								<div class="w-8 h-8 rounded bg-vault-surface-raised border border-vault-border flex items-center justify-center shrink-0">
+									{#if doc.isImage}
+										<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+										</svg>
+									{:else}
+										<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+										</svg>
+									{/if}
+								</div>
+								<div class="min-w-0 flex-1">
+									<p class="text-xs text-vault-text truncate">{doc.fileName}</p>
+									<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
+								</div>
+								<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
 								</svg>
-							</div>
-							<div class="min-w-0 flex-1">
-								<p class="text-xs text-vault-text truncate">{doc.fileName}</p>
-								<p class="text-[10px] text-vault-text-dim">{formatFileSize(doc.fileSize)}</p>
-							</div>
-							<svg class="w-4 h-4 text-vault-text-dim group-hover:text-vault-green transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-							</svg>
-						</button>
+							</button>
+						</div>
 					{/each}
 				</div>
 			</div>
@@ -977,8 +1086,8 @@
 		</div>
 	{/if}
 
-	<!-- Reply area -->
-	<div class="shrink-0 px-6 py-3 border-t border-vault-border bg-vault-surface/80 backdrop-blur-sm">
+	<!-- Reply area — sticky on mobile so it's always accessible -->
+	<div class="shrink-0 sticky bottom-0 z-10 px-6 py-3 border-t border-vault-border bg-vault-surface/95 backdrop-blur-sm">
 		{#if canDecrypt}
 			<form
 				onsubmit={(e) => {
