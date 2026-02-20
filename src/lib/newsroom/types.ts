@@ -129,10 +129,15 @@ export interface CreateInvestigationRequest {
 	codename: string;
 }
 
+export type InvestigationStatus = 'active' | 'on_hold' | 'published' | 'closed';
+
 export interface InvestigationSummary {
 	id: string;
 	thread_id: string;
 	codename: string;
+	status: InvestigationStatus;
+	summary_ciphertext?: string; // base64
+	summary_nonce?: string; // base64
 	created_by: string;
 	created_at: string;
 	updated_at: string;
@@ -149,14 +154,54 @@ export interface InvestigationMember {
 	joined_at: string;
 }
 
+export interface InvestigationReport {
+	thread_id: string;
+	blinded_id: string;
+	status: string;
+	linked_at: string;
+}
+
 export interface InvestigationDetailResponse {
 	id: string;
 	thread_id: string;
 	codename: string;
+	status: InvestigationStatus;
+	summary_ciphertext?: string; // base64
+	summary_nonce?: string; // base64
 	created_by: string;
 	created_at: string;
 	updated_at: string;
 	members: InvestigationMember[];
+	reports: InvestigationReport[];
+}
+
+export interface UpdateInvestigationRequest {
+	status?: InvestigationStatus;
+	summary_ciphertext?: string; // base64
+	summary_nonce?: string; // base64
+}
+
+export interface LinkReportRequest {
+	thread_id: string;
+}
+
+export interface InvestigationNote {
+	id: string;
+	investigation_id: string;
+	journalist_id: string;
+	author_name?: string;
+	ciphertext: string; // base64
+	nonce: string; // base64
+	created_at: string;
+}
+
+export interface InvestigationNoteListResponse {
+	notes: InvestigationNote[];
+}
+
+export interface CreateInvestigationNoteRequest {
+	ciphertext: string; // base64
+	nonce: string; // base64
 }
 
 // ── Key Exchange ─────────────────────────────────────────

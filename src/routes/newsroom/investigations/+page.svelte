@@ -59,6 +59,13 @@
 		});
 	}
 
+	const statusColors: Record<string, { dot: string; label: string }> = {
+		active: { dot: 'bg-emerald-400', label: 'Active' },
+		on_hold: { dot: 'bg-amber-400', label: 'On Hold' },
+		published: { dot: 'bg-blue-400', label: 'Published' },
+		closed: { dot: 'bg-zinc-500', label: 'Closed' }
+	};
+
 	$effect(() => {
 		loadInvestigations();
 	});
@@ -190,6 +197,11 @@
 					<th
 						class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border"
 					>
+						Status
+					</th>
+					<th
+						class="text-left text-[10px] tracking-wide text-zinc-500 font-medium px-3 py-2 border-b border-vault-border"
+					>
 						Report
 					</th>
 					<th
@@ -201,12 +213,19 @@
 			</thead>
 			<tbody>
 				{#each investigations as inv (inv.id)}
+					{@const sc = statusColors[inv.status] ?? statusColors.active}
 					<tr
 						onclick={() => goto(`/newsroom/investigations/${inv.id}`)}
 						class="border-b border-vault-border cursor-pointer transition-colors hover:bg-vault-surface"
 					>
 						<td class="px-3 py-3.5 align-middle">
 							<span class="text-[13px] font-medium text-vault-text">{inv.codename}</span>
+						</td>
+						<td class="px-3 py-3.5 align-middle">
+							<span class="inline-flex items-center gap-1.5">
+								<span class="w-2 h-2 rounded-full {sc.dot}"></span>
+								<span class="text-[11px] text-vault-text-muted">{sc.label}</span>
+							</span>
 						</td>
 						<td class="px-3 py-3.5 align-middle">
 							<span class="font-mono text-[11px] text-vault-text-muted">

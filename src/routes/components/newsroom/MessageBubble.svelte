@@ -16,7 +16,7 @@
 	const isSource = $derived(message.sender_role === 'source');
 	const isDecrypted = $derived(decryptedText !== undefined);
 
-	const label = $derived(senderLabel ?? (isSource ? 'Sender' : 'Responder'));
+	const label = $derived(senderLabel ?? (isSource ? 'Sender' : 'Reporter'));
 
 	function relativeTime(iso: string): string {
 		const date = new Date(iso);

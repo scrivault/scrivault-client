@@ -118,7 +118,7 @@
 				</div>
 				<div class="min-w-0">
 					<p class="text-[13px] text-vault-text truncate">{user.display_name}</p>
-					<p class="text-[10px] font-medium tracking-wide text-zinc-500 capitalize">{user.role === 'editor' ? 'Editor' : 'Responder'}</p>
+					<p class="text-[10px] font-medium tracking-wide text-zinc-500 capitalize">{user.role === 'editor' ? 'Editor' : 'Reporter'}</p>
 				</div>
 			</div>
 			<div class="flex items-center gap-2">

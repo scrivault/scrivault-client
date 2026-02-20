@@ -22,6 +22,11 @@ import type {
 	InvestigationSummary,
 	InvestigationListResponse,
 	InvestigationDetailResponse,
+	UpdateInvestigationRequest,
+	LinkReportRequest,
+	InvestigationNote,
+	InvestigationNoteListResponse,
+	CreateInvestigationNoteRequest,
 	PublicKeysResponse,
 	SealedKeyResponse,
 	CreateKeyGrantRequest,
@@ -162,6 +167,72 @@ export const newsroomApi = {
 			`/newsroom/investigations/${encodeURIComponent(id)}`,
 			requireToken()
 		);
+	},
+
+	updateInvestigation(id: string, req: UpdateInvestigationRequest): Promise<InvestigationSummary> {
+		return authRequest<InvestigationSummary>(
+			`/newsroom/investigations/${encodeURIComponent(id)}`,
+			requireToken(),
+			{ method: 'PATCH', body: JSON.stringify(req) }
+		);
+	},
+
+	async linkReport(investigationId: string, req: LinkReportRequest): Promise<void> {
+		const token = requireToken();
+		const res = await fetch(`${BASE}/newsroom/investigations/${encodeURIComponent(investigationId)}/reports`, {
+			method: 'POST',
+			headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+			body: JSON.stringify(req)
+		});
+		if (!res.ok) {
+			let code = 'unknown';
+			let message = 'Failed to link report';
+			try { const body = await res.json(); code = body.code ?? code; message = body.error ?? message; } catch {}
+			throw new ApiError(res.status, code, message);
+		}
+	},
+
+	async unlinkReport(investigationId: string, threadId: string): Promise<void> {
+		const token = requireToken();
+		const res = await fetch(`${BASE}/newsroom/investigations/${encodeURIComponent(investigationId)}/reports/${encodeURIComponent(threadId)}`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		if (!res.ok) {
+			let code = 'unknown';
+			let message = 'Failed to unlink report';
+			try { const body = await res.json(); code = body.code ?? code; message = body.error ?? message; } catch {}
+			throw new ApiError(res.status, code, message);
+		}
+	},
+
+	createInvestigationNote(investigationId: string, req: CreateInvestigationNoteRequest): Promise<InvestigationNote> {
+		return authRequest<InvestigationNote>(
+			`/newsroom/investigations/${encodeURIComponent(investigationId)}/notes`,
+			requireToken(),
+			{ method: 'POST', body: JSON.stringify(req) }
+		);
+	},
+
+	getInvestigationNotes(investigationId: string): Promise<InvestigationNoteListResponse> {
+		return authRequest<InvestigationNoteListResponse>(
+			`/newsroom/investigations/${encodeURIComponent(investigationId)}/notes`,
+			requireToken()
+		);
+	},
+
+	async deleteInvestigationNote(investigationId: string, noteId: string): Promise<void> {
+		const token = requireToken();
+		const res = await fetch(`${BASE}/newsroom/investigations/${encodeURIComponent(investigationId)}/notes/${encodeURIComponent(noteId)}`, {
+			method: 'DELETE',
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		if (!res.ok) {
+			let code = 'unknown';
+			let message = 'Failed to delete note';
+			try { const body = await res.json(); code = body.code ?? code; message = body.error ?? message; } catch {}
+			throw new ApiError(res.status, code, message);
+		}
 	},
 
 	// Key exchange

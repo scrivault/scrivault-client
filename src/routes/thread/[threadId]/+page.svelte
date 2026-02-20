@@ -499,7 +499,7 @@
 								{#if !sameSender}
 									<div class="flex items-center gap-2 mb-1">
 										<span class="text-[11px] font-medium {isSource ? 'text-vault-text-muted' : 'text-vault-green/70'}">
-											{isSource ? 'You' : 'Responder'}
+											{isSource ? 'You' : 'Reporter'}
 										</span>
 										<span class="text-[10px] text-vault-text-dim">
 											{relativeTime(msg.createdAt)}

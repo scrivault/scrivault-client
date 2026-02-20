@@ -91,6 +91,7 @@
 		mimeType: string;
 		createdAt: string;
 		loading: boolean;
+		error: string;
 	}
 
 	const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico']);
@@ -136,7 +137,7 @@
 
 	function senderLabel(msg: NewsroomMessage): string {
 		if (msg.sender_role === 'source') return 'Sender';
-		const name = msg.sender_display_name || 'Responder';
+		const name = msg.sender_display_name || 'Reporter';
 		// Normalize all-caps emails to lowercase
 		if (name.includes('@')) return name.toLowerCase();
 		return name;
@@ -182,30 +183,28 @@
 		try {
 			const encrypted = await encryptMessage(plaintext, threadKey);
 
-			// Optimistic: add the note to the list immediately with plaintext
-			const optimisticId = `optimistic-${Date.now()}`;
-			const optimisticNote: ThreadNote = {
-				id: optimisticId,
-				thread_id: threadId,
-				journalist_id: user?.journalist_id ?? '',
-				author_name: user?.display_name ?? '',
-				ciphertext: toBase64(encrypted.ciphertext),
-				nonce: toBase64(encrypted.nonce),
-				created_at: new Date().toISOString()
-			};
-			notes = [...notes, optimisticNote];
-			decryptedNotes = new Map([...decryptedNotes, [optimisticId, plaintext]]);
-			newNoteText = '';
-
-			// Send to server, then refresh to get real IDs
-			await newsroomApi.createNote(threadId, {
+			// Send to server first to get real ID
+			const serverNote = await newsroomApi.createNote(threadId, {
 				ciphertext: toBase64(encrypted.ciphertext),
 				nonce: toBase64(encrypted.nonce)
 			});
-			await loadNotes();
-			await decryptAllNotes();
-		} catch {
-			// Silently fail
+
+			// Add the note with its real server ID and the plaintext we already have.
+			// Never show encrypted — we have the plaintext right here.
+			const realNote: ThreadNote = {
+				id: serverNote.id,
+				thread_id: threadId,
+				journalist_id: user?.journalist_id ?? '',
+				author_name: user?.display_name ?? '',
+				ciphertext: serverNote.ciphertext,
+				nonce: serverNote.nonce,
+				created_at: serverNote.created_at ?? new Date().toISOString()
+			};
+			notes = [...notes, realNote];
+			decryptedNotes = new Map([...decryptedNotes, [serverNote.id, plaintext]]);
+			newNoteText = '';
+		} catch (err) {
+			console.error('Failed to save note:', err);
 		} finally {
 			savingNote = false;
 		}
@@ -215,17 +214,24 @@
 		try {
 			await newsroomApi.deleteNote(threadId, noteId);
 			notes = notes.filter((n) => n.id !== noteId);
-		} catch {
-			// Silently fail
+			const newMap = new Map(decryptedNotes);
+			newMap.delete(noteId);
+			decryptedNotes = newMap;
+		} catch (err) {
+			console.error('Failed to delete note:', err);
 		}
 	}
 
 	async function decryptNoteText(note: ThreadNote): Promise<string> {
-		if (!threadKey) return '[encrypted]';
+		if (!threadKey) {
+			console.error('Note decryption failed: no thread key', note.id);
+			return '[DEBUG: no thread key]';
+		}
 		try {
 			return await decryptMessage(fromBase64(note.ciphertext), fromBase64(note.nonce), threadKey);
-		} catch {
-			return '[decryption failed]';
+		} catch (err) {
+			console.error('Note decryption failed:', note.id, err);
+			return `[DEBUG: decryption error — ${err instanceof Error ? err.message : String(err)}]`;
 		}
 	}
 
@@ -233,8 +239,10 @@
 
 	async function decryptAllNotes() {
 		if (!threadKey) return;
-		const newMap = new Map<string, string>();
+		// Preserve already-decrypted notes (optimistic entries)
+		const newMap = new Map<string, string>(decryptedNotes);
 		for (const note of notes) {
+			if (newMap.has(note.id)) continue; // Already decrypted — skip
 			newMap.set(note.id, await decryptNoteText(note));
 		}
 		decryptedNotes = newMap;
@@ -280,7 +288,8 @@
 					isImage,
 					mimeType,
 					createdAt: doc.created_at,
-					loading: isImage // images will auto-decrypt for preview
+					loading: isImage, // images will auto-decrypt for preview
+					error: ''
 				};
 				newMap.set(doc.id, entry);
 			} catch {
@@ -292,37 +301,57 @@
 		// Auto-decrypt images for inline preview
 		for (const [docId, doc] of newMap) {
 			if (doc.isImage) {
-				fetchAndDecryptDocument(docId).catch(() => {});
+				fetchAndDecryptDocument(docId).catch((err) => {
+					console.error('IMG DEBUG: auto-decrypt failed for', docId, err);
+				});
 			}
 		}
 	}
 
 	async function fetchAndDecryptDocument(docId: string): Promise<void> {
-		if (!threadKey) return;
+		console.log('IMG DEBUG 1: Starting fetch for document', docId);
 		const doc = decryptedDocs.get(docId);
-		if (!doc) return;
+		if (!doc) {
+			console.error('IMG DEBUG ERROR: doc not found in decryptedDocs map', docId);
+			return;
+		}
+		if (!threadKey) {
+			console.error('IMG DEBUG ERROR: threadKey is null, cannot decrypt', docId);
+			doc.loading = false;
+			doc.error = 'No decryption key available';
+			decryptedDocs = new Map(decryptedDocs);
+			return;
+		}
 
 		try {
 			const res = await fetch(`/api/documents/${docId}`, {
 				headers: { Authorization: `Bearer ${getToken()}` }
 			});
-			if (!res.ok) throw new Error('Failed to fetch document');
+			console.log('IMG DEBUG 2: Fetch response status', res.status);
+			if (!res.ok) throw new Error(`Fetch failed with status ${res.status}`);
 			const data = await res.json();
+			console.log('IMG DEBUG 3: Encrypted blob size', data.ciphertext?.length ?? 0);
+			console.log('IMG DEBUG 4: Thread key available', !!threadKey);
+			console.log('IMG DEBUG 5: Decryption starting');
 			const plaintext = await decryptFile(
 				fromBase64(data.ciphertext),
 				fromBase64(data.nonce),
 				threadKey
 			);
+			console.log('IMG DEBUG 6: Decrypted blob size', plaintext.length);
 			const blob = new Blob([plaintext], { type: doc.mimeType });
 			const url = URL.createObjectURL(blob);
 			doc.blobUrl = url;
 			doc.previewUrl = url;
 			doc.loading = false;
+			doc.error = '';
+			console.log('IMG DEBUG 7: Blob URL created', url);
 			// Trigger reactivity
 			decryptedDocs = new Map(decryptedDocs);
 		} catch (err) {
-			console.error(`Failed to decrypt document ${docId}:`, err);
+			console.error('IMG DEBUG ERROR:', err);
 			doc.loading = false;
+			doc.error = err instanceof Error ? err.message : 'Decryption failed';
 			decryptedDocs = new Map(decryptedDocs);
 		}
 	}
@@ -650,7 +679,7 @@
 		const bodyText: [number, number, number] = [40, 44, 50];
 		const lineColor: [number, number, number] = [55, 60, 70];
 		const senderBg: [number, number, number] = [34, 38, 44];
-		const responderBg: [number, number, number] = [20, 40, 30];
+		const reporterBg: [number, number, number] = [20, 40, 30];
 
 		function ensureSpace(needed: number) {
 			if (y + needed > pageH - 20) {
@@ -738,7 +767,7 @@
 		y += 7;
 
 		for (const msg of messages) {
-			const rawName = msg.sender_display_name || 'Responder';
+			const rawName = msg.sender_display_name || 'Reporter';
 			const sender = msg.sender_role === 'source' ? 'Sender' : (rawName.includes('@') ? rawName.toLowerCase() : rawName);
 			const text = decryptedTexts.get(msg.id) ?? '[unable to decrypt]';
 			const timestamp = formatTimestamp(msg.created_at);
@@ -753,7 +782,7 @@
 			ensureSpace(blockHeight + 4);
 
 			// Message card background
-			const bgColor = isSender ? senderBg : responderBg;
+			const bgColor = isSender ? senderBg : reporterBg;
 			pdf.setFillColor(...bgColor);
 			pdf.roundedRect(marginL, y - 1, contentW, blockHeight, 1.5, 1.5, 'F');
 
@@ -1045,7 +1074,7 @@
 					loadDocuments().then(() => decryptAllDocuments());
 				}
 				if (notification.type === 'new_note') {
-					loadNotes();
+					loadNotes().then(() => decryptAllNotes());
 				}
 			}
 		});
@@ -1274,6 +1303,15 @@
 											<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 										</svg>
 										<span class="text-xs">Decrypting image…</span>
+									</div>
+								</div>
+							{:else if doc.isImage && doc.error}
+								<div class="w-full bg-vault-bg p-4 flex items-center justify-center">
+									<div class="text-center">
+										<svg class="w-8 h-8 text-vault-text-dim mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+										</svg>
+										<p class="text-[10px] text-vault-text-dim">Preview unavailable</p>
 									</div>
 								</div>
 							{/if}

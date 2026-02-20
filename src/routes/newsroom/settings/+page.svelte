@@ -137,7 +137,7 @@
 					<div class="w-full h-px bg-vault-border-subtle"></div>
 					<div class="flex items-center justify-between">
 						<span class="text-xs text-vault-text-muted">Role</span>
-						<span class="text-xs text-vault-text capitalize">{user.role === 'reporter' ? 'Responder' : user.role}</span>
+						<span class="text-xs text-vault-text capitalize">{user.role === 'reporter' ? 'Reporter' : user.role}</span>
 					</div>
 					<div class="w-full h-px bg-vault-border-subtle"></div>
 					<div class="flex items-center justify-between">

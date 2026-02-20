@@ -213,7 +213,7 @@
 								</div>
 							</div>
 							<div class="flex items-center gap-3 ml-3 shrink-0">
-								<span class="text-[11px] text-vault-text-muted capitalize">{member.role === 'reporter' ? 'Responder' : member.role}</span>
+								<span class="text-[11px] text-vault-text-muted capitalize">{member.role === 'reporter' ? 'Reporter' : member.role}</span>
 								<span class="text-[10px] text-vault-text-dim">
 									{formatDate(member.created_at)}
 								</span>
@@ -276,7 +276,7 @@
 							bind:value={inviteRole}
 							class="w-full bg-vault-surface border border-vault-border rounded-lg px-3 py-2.5 text-sm text-vault-text focus:border-vault-green focus:ring-1 focus:ring-vault-green/50 transition-colors"
 						>
-							<option value="reporter">Responder</option>
+							<option value="reporter">Reporter</option>
 							<option value="editor">Editor</option>
 						</select>
 					</div>
